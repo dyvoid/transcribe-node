@@ -1,0 +1,48 @@
+[project]
+name = "transcribenode"
+version = "0.1.0"
+description = "Self-contained local speech-to-text API service with an OpenAI-compatible interface."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "faster-whisper>=1.0.3",
+    "python-multipart>=0.0.9",
+    "psutil>=5.9.8",
+    # CUDA runtime libraries via pip so no system CUDA Toolkit install is needed.
+    # NVIDIA drivers alone are sufficient. Not installed on macOS.
+    "nvidia-cublas-cu12; platform_system != 'Darwin'",
+    "nvidia-cudnn-cu12; platform_system != 'Darwin'",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "pytest>=8.3.0",
+]
+
+[tool.transcribenode]
+default-model = "large-v3"
+host = "127.0.0.1"
+port = 9000
+models-dir = "models"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI's File()/Form()/Depends() in argument defaults is the intended pattern.
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

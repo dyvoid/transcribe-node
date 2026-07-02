@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TranscribeNode</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+    header { padding: 16px 24px; border-bottom: 1px solid #262a33; }
+    header h1 { margin: 0; font-size: 18px; }
+    header .sub { color: #8b93a1; font-size: 13px; margin-top: 4px; }
+    main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 24px; max-width: 900px; width: 100%; margin: 0 auto; }
+    .zone { background: #171a21; border: 1px solid #262a33; border-radius: 10px; padding: 16px; }
+    .zone h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: #8b93a1; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #21252e; }
+    th { color: #8b93a1; font-weight: 500; }
+    tr.model-row { cursor: pointer; }
+    tr.model-row.selected { background: #1d2a44; }
+    tr.model-row.recommended td:first-child::after { content: " ★ recommended"; color: #7dd3fc; font-size: 11px; }
+    .fields { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+    .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+    .field label { color: #8b93a1; }
+    input, select { background: #0f1115; color: #e6e6e6; border: 1px solid #333a47; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+    .controls { display: flex; align-items: center; gap: 16px; }
+    button { background: #2563eb; color: white; border: 0; border-radius: 8px; padding: 12px 28px; font-size: 15px; cursor: pointer; }
+    button.stop { background: #b91c1c; }
+    button:disabled { opacity: .5; cursor: default; }
+    .state { font-size: 13px; color: #8b93a1; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #6b7280; }
+    .dot.loaded { background: #22c55e; } .dot.loading { background: #eab308; } .dot.idle { background: #6b7280; }
+    #log { font-family: ui-monospace, monospace; font-size: 12px; max-height: 260px; overflow-y: auto; }
+    #log .entry { padding: 4px 0; border-bottom: 1px solid #21252e; display: flex; gap: 12px; }
+    #log .ok { color: #22c55e; } #log .error { color: #ef4444; }
+    .empty { color: #6b7280; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TranscribeNode</h1>
+    <div class="sub" id="hw">Detecting hardware…</div>
+  </header>
+  <main>
+    <section class="zone">
+      <h2>Settings</h2>
+      <table id="models">
+        <thead>
+          <tr><th>Model</th><th>VRAM</th><th>Quality</th><th>Use case</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="fields">
+        <div class="field">
+          <label for="language">Language</label>
+          <input id="language" placeholder="auto" />
+        </div>
+        <div class="field">
+          <label for="format">Response format</label>
+          <select id="format">
+            <option>json</option><option>text</option><option>srt</option>
+            <option>vtt</option><option>verbose_json</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="port">Port</label>
+          <input id="port" disabled />
+        </div>
+      </div>
+    </section>
+
+    <section class="zone">
+      <h2>Engine</h2>
+      <div class="controls">
+        <button id="toggle" disabled>Start</button>
+        <span class="state"><span class="dot idle" id="dot"></span><span id="stateText">idle</span></span>
+      </div>
+    </section>
+
+    <section class="zone">
+      <h2>Live log</h2>
+      <div id="log"><div class="empty">No requests yet.</div></div>
+    </section>
+  </main>
+
+  <script>
+    let selectedModel = null;
+    let state = "idle";
+
+    async function getJSON(url, opts) {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      return res.json();
+    }
+
+    async function init() {
+      const [sys, models] = await Promise.all([
+        getJSON("/system"),
+        getJSON("/v1/models"),
+      ]);
+      document.getElementById("hw").textContent =
+        `${sys.device.toUpperCase()} · ${sys.compute_type} · ${sys.available_memory_gb} GB available` +
+        (sys.gpu_name ? ` · ${sys.gpu_name}` : "");
+      document.getElementById("port").value = location.port || "9000";
+      renderModels(models.data, sys.recommended_model);
+      selectedModel = sys.recommended_model;
+      highlight();
+      await refreshStatus();
+      setInterval(refreshStatus, 2000);
+      setInterval(refreshLog, 2000);
+    }
+
+    function renderModels(models, recommended) {
+      const tbody = document.querySelector("#models tbody");
+      tbody.innerHTML = "";
+      for (const m of models) {
+        const tr = document.createElement("tr");
+        tr.className = "model-row" + (m.id === recommended ? " recommended" : "");
+        tr.dataset.model = m.id;
+        tr.innerHTML = `<td>${m.id}</td><td>~${m.vram_gb}GB</td><td>${m.quality}</td><td>${m.use_case}</td>`;
+        tr.onclick = () => { if (state !== "loaded") { selectedModel = m.id; highlight(); } };
+        tbody.appendChild(tr);
+      }
+    }
+
+    function highlight() {
+      document.querySelectorAll(".model-row").forEach(tr => {
+        tr.classList.toggle("selected", tr.dataset.model === selectedModel);
+      });
+    }
+
+    async function refreshStatus() {
+      const s = await getJSON("/engine/status");
+      state = s.state;
+      document.getElementById("dot").className = "dot " + s.state;
+      document.getElementById("stateText").textContent =
+        s.state === "loaded" ? `loaded: ${s.model} (${s.device})` : s.state;
+      const btn = document.getElementById("toggle");
+      btn.disabled = s.state === "loading";
+      btn.textContent = s.state === "loaded" ? "Stop" : "Start";
+      btn.className = s.state === "loaded" ? "stop" : "";
+    }
+
+    async function refreshLog() {
+      const { entries } = await getJSON("/engine/log");
+      const log = document.getElementById("log");
+      if (!entries.length) { log.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
+      log.innerHTML = entries.map(e =>
+        `<div class="entry"><span>${e.timestamp}</span><span>${e.filename}</span>` +
+        `<span>${e.model}</span><span>${e.processing_seconds}s</span>` +
+        `<span class="${e.status}">${e.status}</span></div>`
+      ).join("");
+    }
+
+    document.getElementById("toggle").onclick = async () => {
+      const btn = document.getElementById("toggle");
+      btn.disabled = true;
+      try {
+        if (state === "loaded") {
+          await getJSON("/engine/unload", { method: "POST" });
+        } else {
+          await getJSON("/engine/load", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: selectedModel }),
+          });
+        }
+      } catch (e) {
+        alert(e.message);
+      }
+      await refreshStatus();
+    };
+
+    init().catch(e => { document.getElementById("hw").textContent = "Error: " + e.message; });
+  </script>
+</body>
+</html>
