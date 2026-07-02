@@ -6,6 +6,9 @@ WhisperX adapter (for diarization) is anticipated and slots in without structura
 change.
 """
 
+import os
+import sys
+import sysconfig
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -13,6 +16,20 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+
+def _register_cuda_dll_dirs() -> None:
+    """Put the pip-installed NVIDIA CUDA DLLs on Windows' loader search path.
+
+    The nvidia-cublas-cu12 / nvidia-cudnn-cu12 wheels drop their DLLs under
+    site-packages/nvidia/*/bin, but ctranslate2 (via faster-whisper) can't find
+    them there unless the directories are registered explicitly.
+    """
+    if sys.platform != "win32":
+        return
+    nvidia_root = Path(sysconfig.get_paths()["purelib"]) / "nvidia"
+    for bin_dir in nvidia_root.glob("*/bin"):
+        os.add_dll_directory(str(bin_dir))
 
 
 @dataclass
@@ -79,6 +96,8 @@ class FasterWhisperEngine(TranscriptionEngine):
         self._model = None
 
     def load(self, model: str, device: str, compute_type: str, download_root: str) -> None:
+        if device == "cuda":
+            _register_cuda_dll_dirs()
         from faster_whisper import WhisperModel
 
         Path(download_root).mkdir(parents=True, exist_ok=True)
@@ -110,14 +129,21 @@ class FasterWhisperEngine(TranscriptionEngine):
         for index, seg in enumerate(segments_gen):
             words = None
             if options.word_timestamps and seg.words:
-                words = [Word(w.word, round(w.start, 2), round(w.end, 2)) for w in seg.words]
-            segments.append(Segment(index, round(seg.start, 2), round(seg.end, 2), seg.text, words))
+                words = [
+                    Word(w.word, round(float(w.start), 2), round(float(w.end), 2))
+                    for w in seg.words
+                ]
+            segments.append(
+                Segment(
+                    index, round(float(seg.start), 2), round(float(seg.end), 2), seg.text, words
+                )
+            )
             texts.append(seg.text)
 
         return TranscriptionResult(
             task=options.task,
             language=info.language,
-            duration=round(info.duration, 2),
+            duration=round(float(info.duration), 2),
             text="".join(texts).strip(),
             segments=segments,
         )
