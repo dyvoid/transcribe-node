@@ -25,6 +25,8 @@ Primary transcription endpoint.
 | `response_format` | string | `json` | `json`, `text`, `srt`, `vtt`, `verbose_json` |
 | `temperature` | float | `0` | Sampling temperature |
 | `timestamp_granularities` | array | `["segment"]` | `segment` and/or `word` — pass `["word"]` for per-word timestamps |
+| `vad_filter` | bool | `true` | Non-standard. Silero VAD strips silence/noise before transcription. Reduces repetition loops. |
+| `condition_on_previous_text` | bool | `false` | Non-standard. When `false`, each segment is decoded without feeding prior output back as context, breaking repetition feedback loops. |
 
 **Response (`verbose_json` — recommended for pipeline use):**
 ```json

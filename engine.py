@@ -79,6 +79,12 @@ class TranscribeOptions:
     prompt: str | None = None
     temperature: float = 0.0
     word_timestamps: bool = False
+    # Anti-repetition defaults: Whisper's repetition/hallucination loops are
+    # triggered by trailing silence and by feeding bad segments back as context.
+    # VAD strips silence before transcription; disabling previous-text conditioning
+    # breaks the feedback loop. See openai/whisper#679 and faster-whisper#465.
+    vad_filter: bool = True
+    condition_on_previous_text: bool = False
 
 
 @dataclass
@@ -144,6 +150,8 @@ class FasterWhisperEngine(TranscriptionEngine):
             initial_prompt=options.prompt,
             temperature=options.temperature,
             word_timestamps=options.word_timestamps,
+            vad_filter=options.vad_filter,
+            condition_on_previous_text=options.condition_on_previous_text,
         )
 
         segments: list[Segment] = []

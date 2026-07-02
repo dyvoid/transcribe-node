@@ -161,6 +161,11 @@ The launchers (`start.bat` / `start.sh`) install the `cuda` extra for you; it's 
 
 - **`/v1/audio/translations` only outputs English.** This mirrors Whisper's `translate` task, which
   was trained X→English only. Other target languages need a separate translation step.
+- **Repetition loops are mitigated by default.** Whisper can get stuck repeating phrases during
+  silence or noise, especially with non-English audio. TranscribeNode enables VAD filtering
+  (`vad_filter=true`) and disables previous-text conditioning
+  (`condition_on_previous_text=false`) by default to prevent this. Both can be overridden per
+  request if needed.
 - One model is loaded at a time; transcription requests are processed serially.
 - v1 UI is an operator console only — no model management, download bars, request history, or auth.
 

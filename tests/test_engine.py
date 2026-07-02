@@ -75,3 +75,22 @@ def test_unload_resets_state():
     assert manager.is_loaded is False
     assert status["state"] == "idle"
     assert status["model"] is None
+
+
+def test_anti_repetition_defaults():
+    opts = TranscribeOptions()
+    assert opts.vad_filter is True
+    assert opts.condition_on_previous_text is False
+
+
+def test_transcribe_forwards_anti_repetition_options():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+    manager.transcribe(
+        "clip.wav",
+        "clip.wav",
+        TranscribeOptions(vad_filter=False, condition_on_previous_text=True),
+    )
+    opts = engine.calls[0][1]
+    assert opts.vad_filter is False
+    assert opts.condition_on_previous_text is True

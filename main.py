@@ -106,6 +106,8 @@ async def _handle_transcription(
     response_format: str,
     temperature: float,
     timestamp_granularities: list[str] | None,
+    vad_filter: bool,
+    condition_on_previous_text: bool,
 ):
     if response_format not in RESPONSE_FORMATS:
         raise HTTPException(
@@ -121,6 +123,8 @@ async def _handle_transcription(
         prompt=prompt,
         temperature=temperature,
         word_timestamps="word" in granularities,
+        vad_filter=vad_filter,
+        condition_on_previous_text=condition_on_previous_text,
     )
 
     suffix = Path(file.filename or "audio").suffix
@@ -155,6 +159,8 @@ async def transcriptions(
     response_format: str = Form("json"),
     temperature: float = Form(0.0),
     timestamp_granularities: list[str] | None = Form(None),
+    vad_filter: bool = Form(True),
+    condition_on_previous_text: bool = Form(False),
 ):
     return await _handle_transcription(
         "transcribe",
@@ -165,6 +171,8 @@ async def transcriptions(
         response_format,
         temperature,
         timestamp_granularities,
+        vad_filter,
+        condition_on_previous_text,
     )
 
 
@@ -176,6 +184,8 @@ async def translations(
     response_format: str = Form("json"),
     temperature: float = Form(0.0),
     timestamp_granularities: list[str] | None = Form(None),
+    vad_filter: bool = Form(True),
+    condition_on_previous_text: bool = Form(False),
 ):
     # Whisper's translate task only outputs English; no target-language parameter exists.
     return await _handle_transcription(
@@ -187,6 +197,8 @@ async def translations(
         response_format,
         temperature,
         timestamp_granularities,
+        vad_filter,
+        condition_on_previous_text,
     )
 
 

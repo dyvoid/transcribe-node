@@ -86,3 +86,25 @@ def test_log_records_request(client):
     entries = client.get("/engine/log").json()["entries"]
     assert entries[0]["filename"] == "clip.wav"
     assert entries[0]["status"] == "ok"
+
+
+def test_anti_repetition_defaults_applied(client):
+    main.manager = EngineManager(StubEngine(), "models")
+    client.post("/engine/load", json={"model": "small"})
+    client.post("/v1/audio/transcriptions", files=_upload())
+    opts = main.manager._engine.calls[0][1]
+    assert opts.vad_filter is True
+    assert opts.condition_on_previous_text is False
+
+
+def test_anti_repetition_can_be_overridden(client):
+    main.manager = EngineManager(StubEngine(), "models")
+    client.post("/engine/load", json={"model": "small"})
+    client.post(
+        "/v1/audio/transcriptions",
+        files=_upload(),
+        data={"vad_filter": "false", "condition_on_previous_text": "true"},
+    )
+    opts = main.manager._engine.calls[0][1]
+    assert opts.vad_filter is False
+    assert opts.condition_on_previous_text is True
