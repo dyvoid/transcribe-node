@@ -30,3 +30,13 @@ def test_models_dir_absolute_is_used_as_is(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSCRIBENODE_MODELS_DIR", str(tmp_path))
     cfg = load_config()
     assert cfg.models_dir == tmp_path
+
+
+def test_env_file_with_utf8_bom_is_parsed(monkeypatch, tmp_path):
+    # Some Windows editors save .env as UTF-8-with-BOM. The BOM must not corrupt
+    # the first key (TRANSCRIBENODE_PORT here).
+    monkeypatch.delenv("TRANSCRIBENODE_PORT", raising=False)
+    monkeypatch.setattr("config.ROOT", tmp_path)
+    (tmp_path / ".env").write_bytes(b"\xef\xbb\xbfTRANSCRIBENODE_PORT=8137\n")
+    cfg = load_config()
+    assert cfg.port == 8137

@@ -32,7 +32,9 @@ def _resolve_models_dir(value: str) -> Path:
 
 def load_config() -> Config:
     # Load .env without overriding real environment variables (env wins).
-    load_dotenv(ROOT / ".env")
+    # utf-8-sig transparently strips a UTF-8 BOM if present; some Windows editors
+    # save .env with a BOM, which would otherwise corrupt the first key.
+    load_dotenv(ROOT / ".env", encoding="utf-8-sig")
 
     data: dict[str, object] = {}
     pyproject = ROOT / "pyproject.toml"
