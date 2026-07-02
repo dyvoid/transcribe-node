@@ -21,7 +21,7 @@ tmp/
 temp/
 
 # --- AI tool artifacts ---
-# Caches and scratch output from AI coding tools. Keep .prompts/ tracked -- those are intentional.
+# Caches and scratch output from AI coding tools.
 .aider*
 .claude/
 .cursor/

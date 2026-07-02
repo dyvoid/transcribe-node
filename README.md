@@ -1,5 +1,11 @@
 # TranscribeNode
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+![Managed with uv](https://img.shields.io/badge/managed%20with-uv-de5fe9.svg)
+![Built with FastAPI](https://img.shields.io/badge/built%20with-FastAPI-009688.svg)
+![Backend: faster-whisper](https://img.shields.io/badge/backend-faster--whisper-ff6f00.svg)
+
 A self-contained, on-demand local speech-to-text API service for Windows, Mac, and Linux. Launch it
 with one script, pick a model in the browser, hit **Start**. It exposes an OpenAI-compatible REST
 API at `http://localhost:9000` that accepts any audio *or video* file and returns transcripts with
@@ -133,7 +139,7 @@ uv run mypy .        # type check
 
 ## License
 
-TODO: choose a license before publishing (e.g. MIT or Apache-2.0) and add a `LICENSE` file.
+Released under the [MIT License](LICENSE).
 
 ## Documentation
 

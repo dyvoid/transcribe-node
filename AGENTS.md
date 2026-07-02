@@ -66,11 +66,8 @@ Put AI context in the body, not the subject:
 ```
 feat(scope): short imperative summary
 
-ai-assisted: <model> | prompt: .prompts/<name>.md
+ai-assisted: <model>
 ```
-
-### Prompts
-Prompts that produced meaningful code live in `.prompts/`. Reference them from the commit body.
 
 ### Python specifics
 - Dependency manager: `uv`. Do not switch to poetry/pip-tools without an ADR. Python version is

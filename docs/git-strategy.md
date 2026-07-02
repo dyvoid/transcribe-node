@@ -43,20 +43,7 @@ Annotate AI-assisted commits in the body, not the subject, to keep the subject r
 ```
 feat(auth): add JWT refresh logic
 
-ai-assisted: <model> | prompt: .prompts/auth-refresh.md
-```
-
----
-
-## Prompt Versioning
-
-Store prompts that generated significant code alongside the code:
-
-```
-.prompts/
-  auth-refresh.md
-  parser-rewrite.md
-  user-model.md
+ai-assisted: <model>
 ```
 
 ---
