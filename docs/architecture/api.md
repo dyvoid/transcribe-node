@@ -114,8 +114,9 @@ Compute type selected automatically:
 
 ## Browser UI
 
-Served by FastAPI at `http://localhost:9000`. Opened automatically by the server on startup. Single
-screen, no navigation.
+Served by FastAPI at `http://localhost:9000` (default port, configurable via
+`TRANSCRIBENODE_PORT`). Opened automatically by the server on startup at the resolved
+host and port. Single screen, no navigation.
 
 **Three zones:**
 
@@ -169,5 +170,5 @@ touching the launcher.
 2. Clone or copy the project folder to the machine
 3. Run `start.bat` (Windows) or `./start.sh` (Mac/Linux) — uv creates the venv and installs
    dependencies on first run
-4. Browser opens automatically at `http://localhost:9000`
+4. Browser opens automatically at the resolved host and port (default `http://localhost:9000`)
 5. First transcription for a given model triggers a download (~3GB for large-v3), cached after that

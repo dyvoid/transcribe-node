@@ -18,3 +18,5 @@ Shipped in v1:
 | Core transcription API | `/v1/audio/transcriptions` + `/translations`, OpenAI-compatible, faster-whisper backend |
 | Hardware detection + model recommendation | `GET /system`; probes device/compute type/memory and recommends a model |
 | Browser UI (settings, start/stop, live log) | Operator console, three zones |
+| Runtime configuration | `.env` + `TRANSCRIBENODE_*` env vars + `pyproject.toml` + defaults, with documented precedence |
+| Configurable host and port | Bind to any interface/port; launcher opens the browser at the resolved address |

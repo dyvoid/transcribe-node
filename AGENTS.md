@@ -13,7 +13,8 @@ and decisions; they deliberately avoid AI-specific instructions so there's no se
 
 TranscribeNode is a self-contained, on-demand local speech-to-text API service for Windows, Mac,
 and Linux. A platform launcher script starts a FastAPI server that serves both a browser-based
-settings UI and an OpenAI-compatible REST API at `localhost:9000`. It accepts any audio or video
+settings UI and an OpenAI-compatible REST API at `localhost:9000` (default port,
+configurable via `TRANSCRIBENODE_PORT`). It accepts any audio or video
 format and returns word-level transcripts with precise timestamps, using `faster-whisper` as the
 transcription backend. It's intended as a shared primitive: any project that can make an HTTP
 request can use it as a transcription service.
