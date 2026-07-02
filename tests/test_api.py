@@ -45,17 +45,13 @@ def test_load_then_transcribe_json(client):
 
 def test_response_format_text(client):
     client.post("/engine/load", json={"model": "small"})
-    res = client.post(
-        "/v1/audio/transcriptions", files=_upload(), data={"response_format": "text"}
-    )
+    res = client.post("/v1/audio/transcriptions", files=_upload(), data={"response_format": "text"})
     assert res.text == "hello world"
 
 
 def test_response_format_srt(client):
     client.post("/engine/load", json={"model": "small"})
-    res = client.post(
-        "/v1/audio/transcriptions", files=_upload(), data={"response_format": "srt"}
-    )
+    res = client.post("/v1/audio/transcriptions", files=_upload(), data={"response_format": "srt"})
     assert "00:00:00,000 --> 00:00:01,000" in res.text
     assert "hello world" in res.text
 
@@ -72,9 +68,7 @@ def test_verbose_json_has_segments(client):
 
 def test_bad_response_format_rejected(client):
     client.post("/engine/load", json={"model": "small"})
-    res = client.post(
-        "/v1/audio/transcriptions", files=_upload(), data={"response_format": "yaml"}
-    )
+    res = client.post("/v1/audio/transcriptions", files=_upload(), data={"response_format": "yaml"})
     assert res.status_code == 400
 
 

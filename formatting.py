@@ -21,9 +21,7 @@ def to_verbose_json(result: TranscriptionResult) -> dict[str, object]:
             "text": seg.text,
         }
         if seg.words is not None:
-            entry["words"] = [
-                {"word": w.word, "start": w.start, "end": w.end} for w in seg.words
-            ]
+            entry["words"] = [{"word": w.word, "start": w.start, "end": w.end} for w in seg.words]
         segments.append(entry)
 
     return {

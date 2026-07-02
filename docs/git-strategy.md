@@ -99,5 +99,5 @@ Enforce the strategy at the repo level on GitHub:
 
 ## Versioning
 
-Tag meaningful milestones. The versioning scheme (semver, date-based, sequential) is
-project-dependent -- pick one for this project and stick to it.
+Semantic Versioning (`MAJOR.MINOR.PATCH`), bare numeric tags with no `v` prefix (e.g. `1.0.0`,
+`1.1.0`). This keeps tags identical to PyPI/package versions, which don't use a `v` prefix.

@@ -157,7 +157,13 @@ async def transcriptions(
     timestamp_granularities: list[str] | None = Form(None),
 ):
     return await _handle_transcription(
-        "transcribe", file, model, language, prompt, response_format, temperature,
+        "transcribe",
+        file,
+        model,
+        language,
+        prompt,
+        response_format,
+        temperature,
         timestamp_granularities,
     )
 
@@ -173,7 +179,13 @@ async def translations(
 ):
     # Whisper's translate task only outputs English; no target-language parameter exists.
     return await _handle_transcription(
-        "translate", file, model, None, prompt, response_format, temperature,
+        "translate",
+        file,
+        model,
+        None,
+        prompt,
+        response_format,
+        temperature,
         timestamp_granularities,
     )
 
