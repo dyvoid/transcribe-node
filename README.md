@@ -124,11 +124,14 @@ start.bat/.sh      Launchers
 ## Development
 
 ```bash
-uv sync
-uv run pytest        # tests
-uv run ruff check .  # lint
-uv run mypy .        # type check
+uv sync                # base install (CPU); tests and checks run on this
+uv sync --extra cuda   # add NVIDIA CUDA libraries to exercise the GPU path
+uv run pytest          # tests
+uv run ruff check .    # lint
+uv run mypy .          # type check
 ```
+
+The launchers (`start.bat` / `start.sh`) install the `cuda` extra for you; it's a no-op on macOS.
 
 ## Notes & Limitations
 

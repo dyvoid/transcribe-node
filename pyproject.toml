@@ -10,8 +10,13 @@ dependencies = [
     "faster-whisper>=1.0.3",
     "python-multipart>=0.0.9",
     "psutil>=5.9.8",
-    # CUDA runtime libraries via pip so no system CUDA Toolkit install is needed.
-    # NVIDIA drivers alone are sufficient. Not installed on macOS.
+]
+
+[project.optional-dependencies]
+# CUDA runtime libraries via pip so no system CUDA Toolkit install is needed;
+# NVIDIA drivers alone are sufficient. Opt in with `uv sync --extra cuda`
+# (the launchers do this). The markers keep them off macOS even when requested.
+cuda = [
     "nvidia-cublas-cu12; platform_system != 'Darwin'",
     "nvidia-cudnn-cu12; platform_system != 'Darwin'",
 ]

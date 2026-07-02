@@ -67,7 +67,8 @@ status.
 ## Constraints
 
 - No system-level CUDA Toolkit install required -- CUDA libraries come via pip
-  (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`); NVIDIA drivers alone are sufficient.
+  (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`) as the optional `cuda` extra that the launchers
+  install; NVIDIA drivers alone are sufficient. See [ADR 0003](../adr/0003-cuda-as-optional-extra.md).
 - No system Python required -- `uv` manages Python, the venv, and dependencies in one tool.
 - API surface must implement the OpenAI Audio Transcription API 1:1 for `/v1/audio/transcriptions`
   and `/v1/audio/translations`; non-standard endpoints (`/system`, `/engine/*`, `/health`,
