@@ -50,9 +50,31 @@ chmod +x start.sh   # first time only
 ./start.sh
 ```
 
-The launcher runs `uv sync` (installs everything on first run), starts the server, and opens
-`http://localhost:9000`. In the UI, pick a model and click **Start** — the first load downloads the
-model from HuggingFace (cached under `models/` afterward).
+The launcher runs `uv sync` (installs everything on first run), starts the server, and opens the UI
+in your browser. Pick a model and click **Start** — the first load downloads the model from
+HuggingFace (cached under `models/` afterward).
+
+## Configuration
+
+Copy `.env.example` to `.env` and edit it:
+
+```bash
+cp .env.example .env
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `TRANSCRIBENODE_HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` to expose on your LAN. |
+| `TRANSCRIBENODE_PORT` | `9000` | Port for the API and UI. |
+| `TRANSCRIBENODE_MODEL` | `large-v3` | Default model when a request doesn't specify one. |
+| `TRANSCRIBENODE_MODELS_DIR` | `models` | Where downloaded models are cached. |
+
+Precedence is: real environment variable > `.env` > `pyproject.toml` (`[tool.transcribenode]`) >
+built-in default. The server opens the browser at whatever port it resolves, so changing the port
+just works.
+
+> **Network exposure:** the API has no authentication. Binding to `0.0.0.0` makes it reachable by
+> anyone on your local network, including model load/unload. Only do this on a trusted network.
 
 ## Usage
 
@@ -105,7 +127,7 @@ The server detects your hardware and recommends a model on load; you can pick an
 | `medium` | ~3GB | Good | Constrained VRAM |
 | `small` | ~2GB | OK | Fast previews |
 
-Change the default in `pyproject.toml` under `[tool.transcribenode]`.
+Change the default via `TRANSCRIBENODE_MODEL` in `.env` (see [Configuration](#configuration)).
 
 ## Project Structure
 
@@ -114,7 +136,8 @@ main.py            FastAPI server + serves the UI
 engine.py          Engine interface + faster-whisper adapter + state manager
 hardware.py        Device / compute-type / memory detection
 catalog.py         Model catalog + recommendation
-config.py          Config from pyproject.toml + env overrides
+config.py          Config from .env / pyproject.toml / env
+.env.example        Copy to .env to configure host, port, model, cache dir
 formatting.py      text / srt / vtt / verbose_json output
 static/            Browser UI
 tests/             Unit + API tests

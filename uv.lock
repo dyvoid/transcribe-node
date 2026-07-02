@@ -1150,6 +1150,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "faster-whisper" },
     { name = "psutil" },
+    { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1174,6 +1175,7 @@ requires-dist = [
     { name = "nvidia-cublas-cu12", marker = "sys_platform != 'darwin' and extra == 'cuda'" },
     { name = "nvidia-cudnn-cu12", marker = "sys_platform != 'darwin' and extra == 'cuda'" },
     { name = "psutil", specifier = ">=5.9.8" },
+    { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]

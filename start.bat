@@ -9,5 +9,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-start "" "http://localhost:9000"
+REM main.py opens the browser at the configured port once the server is ready.
 uv run python main.py

@@ -114,7 +114,7 @@ Compute type selected automatically:
 
 ## Browser UI
 
-Served by FastAPI at `http://localhost:9000`. Opened automatically by the launch script. Single
+Served by FastAPI at `http://localhost:9000`. Opened automatically by the server on startup. Single
 screen, no navigation.
 
 **Three zones:**
@@ -145,13 +145,16 @@ doesn't already expose.
 Two separate scripts, each doing exactly one thing for their platform.
 
 **`start.bat` (Windows)**
-1. Runs `uv sync` to ensure dependencies are installed
-2. Starts the FastAPI server via `uv run`
-3. Opens `http://localhost:9000` in the default browser
-4. Close the window to stop the process (and with it the UI and API)
+1. Runs `uv sync --extra cuda` to ensure dependencies (including GPU libraries) are installed
+2. Starts the FastAPI server via `uv run python main.py`
+3. Close the window to stop the process (and with it the UI and API)
 
 **`start.sh` (Mac / Linux)**
 Same steps, Unix paths and commands. Mark executable with `chmod +x start.sh` after cloning.
+
+The server itself opens the browser at the configured port once it's accepting connections, so
+changing the port (via `TRANSCRIBENODE_PORT` or `pyproject.toml`) opens the correct URL without
+touching the launcher.
 
 ### Platform Notes
 - **Windows / Linux:** NVIDIA GPU detected via `nvidia-smi`, VRAM reported to UI

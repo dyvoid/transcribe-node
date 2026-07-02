@@ -6,7 +6,5 @@ cd "$(dirname "$0")"
 # The cuda extra is a no-op on macOS (dependency markers exclude it there).
 uv sync --extra cuda
 
-# Open the browser shortly after the server starts.
-( sleep 2; python3 -m webbrowser "http://localhost:9000" >/dev/null 2>&1 || true ) &
-
+# main.py opens the browser at the configured port once the server is ready.
 uv run python main.py

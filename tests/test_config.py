@@ -17,3 +17,16 @@ def test_env_overrides(monkeypatch):
     assert cfg.default_model == "medium"
     assert cfg.port == 8123
     assert cfg.host == "0.0.0.0"
+
+
+def test_models_dir_relative_is_under_root(monkeypatch):
+    monkeypatch.setenv("TRANSCRIBENODE_MODELS_DIR", "cache/models")
+    cfg = load_config()
+    assert cfg.models_dir.is_absolute()
+    assert cfg.models_dir.name == "models"
+
+
+def test_models_dir_absolute_is_used_as_is(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSCRIBENODE_MODELS_DIR", str(tmp_path))
+    cfg = load_config()
+    assert cfg.models_dir == tmp_path

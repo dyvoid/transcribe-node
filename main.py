@@ -2,6 +2,7 @@
 info, and the operator UI. Run directly to start the service."""
 
 import tempfile
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -180,7 +181,27 @@ async def translations(
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def _open_browser_when_ready(url: str) -> None:
+    """Open the UI in the default browser once the server is accepting connections."""
+    import socket
+    import threading
+    import webbrowser
+
+    def wait_and_open() -> None:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            with socket.socket() as sock:
+                sock.settimeout(0.5)
+                if sock.connect_ex(("127.0.0.1", CONFIG.port)) == 0:
+                    break
+            time.sleep(0.25)
+        webbrowser.open(url)
+
+    threading.Thread(target=wait_and_open, daemon=True).start()
+
+
 if __name__ == "__main__":
     import uvicorn
 
+    _open_browser_when_ready(f"http://localhost:{CONFIG.port}")
     uvicorn.run(app, host=CONFIG.host, port=CONFIG.port)
