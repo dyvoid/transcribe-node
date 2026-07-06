@@ -118,25 +118,46 @@ Served by FastAPI at `http://localhost:9000` (default port, configurable via
 `TRANSCRIBENODE_PORT`). Opened automatically by the server on startup at the resolved
 host and port. Single screen, no navigation.
 
-**Three zones:**
+**Four zones, top to bottom: Settings, Engine, Transcribe, Live log.** See
+[ADR 0005](../adr/0005-ui-panel-lifecycle-and-transcribe-zone.md) for why Transcribe exists and how
+panel active/inactive state works.
 
-**Settings (top)** — configured before loading a model:
+**Settings** — configured before loading a model:
 - Model picker with spec table (memory, quality, use case) inline. On load, the UI reads `GET /system`
   and highlights the server-recommended model. User can select any model regardless.
 - Language (default: auto-detect)
 - Response format default
 - Port
 
-**Start / Stop button (center)** — loads or unloads the selected model (engine state). Explicit user
+Active while the engine is `idle`/`loading`. Collapses to its header, dimmed and non-interactive,
+once the engine is `loaded` — there is no user control to expand it manually; it re-expands only
+when the engine returns to `idle`.
+
+**Engine** — Start / Stop button, loads or unloads the selected model (engine state). Explicit user
 action; no model is loaded until clicked. The button reflects current engine state. This does not
-start or stop the server process — the process runs as long as the window is open.
+start or stop the server process — the process runs as long as the window is open. Always active,
+regardless of engine state.
 
-**Live log (bottom)** — scrolling feed of incoming requests once a model is loaded: timestamp,
-filename, model used, processing time, status.
+**Transcribe** — the inverse of Settings: collapsed, dimmed, and non-interactive while the engine is
+`idle`/`loading`, active once the engine is `loaded`. Holds:
+- A drag/drop-or-click file input.
+- A small per-job form exposing the parameters this branch's `/v1/audio/transcriptions` /
+  `/translations` endpoints accept: task (transcribe/translate), language, prompt, response format,
+  and word-level timestamps. `temperature` is intentionally not exposed (advanced, rarely needed).
+  If the running branch's endpoint gains parameters (e.g. anti-repetition options), this form needs
+  a matching update — it is authored by hand, not derived from the API schema.
+- On completion: the transcript rendered inline, with a copy-to-clipboard action and a download
+  action (file named after the source file, extension matching the selected response format).
 
-**v1 scope:** the three zones above and nothing more. Model management (deleting cached models),
-download progress bars, request history persistence, and authentication are explicitly out of scope
-for the first version. The UI is an operator console, not an admin panel, and holds no logic the API
+Calls the existing transcription endpoints directly; no new backend surface.
+
+**Live log** — scrolling feed of incoming requests once a model is loaded: timestamp,
+filename, model used, processing time, status. Always active, regardless of engine state.
+
+**Scope:** the four zones above and nothing more. Model management (deleting cached models),
+request history persistence, and authentication are explicitly out of scope. Download progress is
+console-only (see [ADR 0006](../adr/0006-download-progress-console-logging.md)), not a UI
+progress bar. The UI is an operator console, not an admin panel, and holds no logic the API
 doesn't already expose.
 
 ---

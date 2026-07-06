@@ -74,8 +74,11 @@ status.
 - API surface must implement the OpenAI Audio Transcription API 1:1 for `/v1/audio/transcriptions`
   and `/v1/audio/translations`; non-standard endpoints (`/system`, `/engine/*`, `/health`,
   `/v1/models`) are additive, not replacements.
-- v1 UI scope is fixed to three zones (settings, start/stop, live log). Model management, download
-  progress bars, request history persistence, and authentication are explicitly out of scope for v1.
+- UI scope is four zones (settings, engine start/stop, transcribe, live log), with panel
+  active/inactive state driven by engine status (see [ADR 0005](../adr/0005-ui-panel-lifecycle-and-transcribe-zone.md)).
+  Model management, request history persistence, and authentication remain explicitly out of scope.
+- Download progress is a console-only milestone log during model load, not a UI progress bar
+  (see [ADR 0006](../adr/0006-download-progress-console-logging.md)).
 
 ## Decisions
 
