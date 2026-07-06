@@ -136,6 +136,14 @@
             <label for="tWords">Word timestamps</label>
             <input type="checkbox" id="tWords" />
           </div>
+          <div class="field">
+            <label for="tVad">Filter silence/noise (VAD)</label>
+            <input type="checkbox" id="tVad" checked />
+          </div>
+          <div class="field">
+            <label for="tCondition">Condition on previous text</label>
+            <input type="checkbox" id="tCondition" />
+          </div>
         </div>
         <div class="controls" style="margin-top:12px">
           <button id="tRun" disabled>Transcribe</button>
@@ -285,10 +293,14 @@
       const lang = document.getElementById("tLanguage").value.trim();
       const prompt = document.getElementById("tPrompt").value.trim();
       const words = document.getElementById("tWords").checked;
+      const vad = document.getElementById("tVad").checked;
+      const condition = document.getElementById("tCondition").checked;
 
       const form = new FormData();
       form.append("file", selectedFile);
       form.append("response_format", format);
+      form.append("vad_filter", vad);
+      form.append("condition_on_previous_text", condition);
       if (prompt) form.append("prompt", prompt);
       if (words) form.append("timestamp_granularities", "word");
       if (task === "transcribe" && lang) form.append("language", lang);

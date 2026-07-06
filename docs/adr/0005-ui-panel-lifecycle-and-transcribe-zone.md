@@ -58,8 +58,9 @@ exposed on this branch.
   is still presentation-only — the UI continues to hold no business logic of its own; it reflects
   `GET /engine/status`, exactly as Settings and Live log already do.
 - The Transcribe zone's per-job form only exposes parameters the currently running branch's
-  `/v1/audio/transcriptions` endpoint actually accepts. If that endpoint's parameter set changes
-  (e.g. anti-repetition options land from another branch), the form needs a matching update — it is
-  not auto-derived from the API.
+  `/v1/audio/transcriptions` endpoint actually accepts. If that endpoint's parameter set changes,
+  the form needs a matching update — it is not auto-derived from the API. This already happened once:
+  when the anti-repetition options (`vad_filter`, `condition_on_previous_text`) landed, the form
+  gained matching checkboxes.
 - No new backend endpoints, no new dependencies. The existing transcription endpoint, existing
   engine status polling, and browser-native `<input type="file">` drag/drop are sufficient.

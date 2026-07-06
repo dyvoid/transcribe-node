@@ -145,9 +145,10 @@ regardless of engine state.
 - A drag/drop-or-click file input.
 - A small per-job form exposing the parameters this branch's `/v1/audio/transcriptions` /
   `/translations` endpoints accept: task (transcribe/translate), language, prompt, response format,
-  and word-level timestamps. `temperature` is intentionally not exposed (advanced, rarely needed).
-  If the running branch's endpoint gains parameters (e.g. anti-repetition options), this form needs
-  a matching update — it is authored by hand, not derived from the API schema.
+  word-level timestamps, and the anti-repetition toggles `vad_filter` (on by default) and
+  `condition_on_previous_text` (off by default). `temperature` is intentionally not exposed
+  (advanced, rarely needed). This form is authored by hand, not derived from the API schema, so it
+  must be updated whenever the endpoint's parameter set changes.
 - On completion: the transcript rendered inline, with a copy-to-clipboard action and a download
   action (file named after the source file, extension matching the selected response format).
 
