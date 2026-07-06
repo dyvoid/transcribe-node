@@ -20,7 +20,7 @@ from hardware import detect_hardware
 CONFIG = load_config()
 STATIC_DIR = CONFIG.models_dir.parent / "static"
 
-app = FastAPI(title="TranscribeNode", version="1.2.0")
+app = FastAPI(title="TranscribeNode", version="1.2.1")
 manager = EngineManager(FasterWhisperEngine(), str(CONFIG.models_dir))
 
 RESPONSE_FORMATS = {"json", "text", "srt", "vtt", "verbose_json"}
