@@ -128,7 +128,7 @@
           <div class="field">
             <label for="tFormat">Output format</label>
             <select id="tFormat">
-              <option>json</option><option>text</option><option>srt</option>
+              <option>text</option><option>json</option><option>srt</option>
               <option>vtt</option><option>verbose_json</option>
             </select>
           </div>
@@ -320,7 +320,7 @@
         let text, ext;
         if (format === "json" || format === "verbose_json") {
           const data = await res.json();
-          text = format === "json" ? (data.text ?? "") : JSON.stringify(data, null, 2);
+          text = JSON.stringify(data, null, 2);
           ext = "json";
         } else {
           text = await res.text();
