@@ -91,9 +91,20 @@ Before anything merges to `main`:
 
 Enforce the strategy at the repo level on GitHub:
 
-- No direct push to `main`
+- No direct push to `main`, with two exceptions (below)
 - Require fast-forward / rebase-based merges
 - Require CI to pass before merge
+
+### Direct commits to `main`
+
+Direct commits to `main` are permitted only when:
+
+- The change is non-functional (e.g. documentation, comments, roadmap/ADR updates) and touches no
+  application code or tests, or
+- The maintainer gives express permission for that specific commit.
+
+Everything else goes through a short-lived branch. Even for allowed direct commits, the commit
+conventions (Conventional Commits, AI annotation) still apply.
 
 ---
 
