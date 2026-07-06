@@ -32,6 +32,21 @@ def _register_cuda_dll_dirs() -> None:
         os.add_dll_directory(str(bin_dir))
 
 
+def _is_model_cached(model: str, download_root: Path) -> bool:
+    """Heuristic: is this model already present under the cache directory?
+
+    faster-whisper downloads via huggingface_hub, which lays models out as
+    ``models--<org>--faster-whisper-<name>``. A local path or an already-cached
+    directory counts as present. This is advisory only (see ADR 0006): a partial
+    or corrupt cache is misreported as present, but faster-whisper still errors
+    on genuine failure.
+    """
+    if Path(model).is_dir():
+        return True
+    token = model.replace("/", "--")
+    return any(token in entry.name for entry in download_root.glob("*") if entry.is_dir())
+
+
 @dataclass
 class Word:
     word: str
@@ -100,13 +115,20 @@ class FasterWhisperEngine(TranscriptionEngine):
             _register_cuda_dll_dirs()
         from faster_whisper import WhisperModel
 
-        Path(download_root).mkdir(parents=True, exist_ok=True)
+        root = Path(download_root)
+        root.mkdir(parents=True, exist_ok=True)
+        if not _is_model_cached(model, root):
+            print(
+                f"[engine] downloading model '{model}' (first use, may take a while)...",
+                flush=True,
+            )
         self._model = WhisperModel(
             model,
             device=device,
             compute_type=compute_type,
             download_root=download_root,
         )
+        print(f"[engine] model '{model}' ready.", flush=True)
 
     def unload(self) -> None:
         self._model = None

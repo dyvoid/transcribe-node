@@ -1,7 +1,7 @@
 import pytest
 from stubs import StubEngine
 
-from engine import EngineManager, TranscribeOptions
+from engine import EngineManager, TranscribeOptions, _is_model_cached
 
 
 def make_manager() -> tuple[EngineManager, StubEngine]:
@@ -54,6 +54,18 @@ def test_transcribe_error_is_logged_and_reraised():
     with pytest.raises(RuntimeError):
         manager.transcribe("clip.wav", "clip.wav", TranscribeOptions())
     assert manager.log_entries()[0]["status"] == "error"
+
+
+def test_is_model_cached_detects_hf_layout(tmp_path):
+    assert _is_model_cached("large-v3", tmp_path) is False
+    (tmp_path / "models--Systran--faster-whisper-large-v3").mkdir()
+    assert _is_model_cached("large-v3", tmp_path) is True
+
+
+def test_is_model_cached_accepts_local_dir(tmp_path):
+    local = tmp_path / "my-model"
+    local.mkdir()
+    assert _is_model_cached(str(local), tmp_path) is True
 
 
 def test_unload_resets_state():
