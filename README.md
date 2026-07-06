@@ -27,8 +27,8 @@ transcription, and any tool written against the OpenAI audio API works by swappi
   audio never leaves the machine.
 - **GPU or CPU** — automatic NVIDIA CUDA detection with CPU fallback. CUDA libraries install via
   pip, so no system CUDA Toolkit is required.
-- **Operator UI** — a single-screen browser console to pick a model, start/stop the engine, and
-  watch a live request log.
+- **Operator UI** — a single-screen browser console to pick a model, start/stop the engine,
+  transcribe a file by drag/drop, and watch a live request log.
 
 ## Requirements
 
@@ -167,7 +167,8 @@ The launchers (`start.bat` / `start.sh`) install the `cuda` extra for you; it's 
   (`condition_on_previous_text=false`) by default to prevent this. Both can be overridden per
   request if needed.
 - One model is loaded at a time; transcription requests are processed serially.
-- v1 UI is an operator console only — no model management, download bars, request history, or auth.
+- The UI is an operator console: model management, a download progress bar (download milestones are
+  logged to the console instead), request history persistence, and authentication are out of scope.
 
 ## License
 

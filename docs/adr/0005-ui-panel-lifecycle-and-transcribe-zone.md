@@ -1,6 +1,6 @@
 # ADR 0005: UI panel lifecycle and a Transcribe zone
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-06
 
 ## Context

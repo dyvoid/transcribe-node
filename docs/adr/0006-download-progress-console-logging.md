@@ -1,6 +1,6 @@
 # ADR 0006: Download progress as console milestones, not a UI progress bar
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-06
 
 ## Context
