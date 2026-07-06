@@ -38,6 +38,22 @@
     #log .entry { padding: 4px 0; border-bottom: 1px solid #21252e; display: flex; gap: 12px; }
     #log .ok { color: #22c55e; } #log .error { color: #ef4444; }
     .empty { color: #6b7280; font-size: 13px; }
+
+    /* Panel active/inactive lifecycle (ADR 0005): non-interactive, header-only when collapsed. */
+    .zone.collapsed { opacity: .45; }
+    .zone.collapsed .zone-body { display: none; }
+    .zone.collapsed h2 { margin: 0; }
+    .zone.collapsed h2::after { content: attr(data-collapsed-hint); color: #6b7280; font-size: 11px; text-transform: none; letter-spacing: normal; margin-left: 8px; }
+    .zone.locked .zone-body { pointer-events: none; }
+
+    .drop { border: 1px dashed #3a4150; border-radius: 8px; padding: 24px; text-align: center; color: #8b93a1; font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .drop.over { border-color: #2563eb; background: #14203a; color: #cbd5e1; }
+    .drop strong { color: #e6e6e6; }
+    button.secondary { background: #2a2f3a; padding: 8px 16px; font-size: 13px; }
+    #tResult { margin-top: 16px; }
+    #tResult pre { background: #0f1115; border: 1px solid #262a33; border-radius: 8px; padding: 12px; font-family: ui-monospace, monospace; font-size: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
+    #tResult .actions { display: flex; gap: 8px; margin-top: 8px; }
+    #tStatus { font-size: 13px; color: #8b93a1; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -46,50 +62,108 @@
     <div class="sub" id="hw">Detecting hardware…</div>
   </header>
   <main>
-    <section class="zone">
-      <h2>Settings</h2>
-      <table id="models">
-        <thead>
-          <tr><th>Model</th><th>VRAM</th><th>Quality</th><th>Use case</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div class="fields">
-        <div class="field">
-          <label for="language">Language</label>
-          <input id="language" placeholder="auto" />
-        </div>
-        <div class="field">
-          <label for="format">Response format</label>
-          <select id="format">
-            <option>json</option><option>text</option><option>srt</option>
-            <option>vtt</option><option>verbose_json</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="port">Port</label>
-          <input id="port" disabled />
+    <section class="zone" id="settingsZone">
+      <h2 data-collapsed-hint="locked while engine is running">Settings</h2>
+      <div class="zone-body">
+        <table id="models">
+          <thead>
+            <tr><th>Model</th><th>VRAM</th><th>Quality</th><th>Use case</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="fields">
+          <div class="field">
+            <label for="language">Language</label>
+            <input id="language" placeholder="auto" />
+          </div>
+          <div class="field">
+            <label for="format">Response format</label>
+            <select id="format">
+              <option>json</option><option>text</option><option>srt</option>
+              <option>vtt</option><option>verbose_json</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="port">Port</label>
+            <input id="port" disabled />
+          </div>
         </div>
       </div>
     </section>
 
     <section class="zone">
       <h2>Engine</h2>
-      <div class="controls">
-        <button id="toggle" disabled>Start</button>
-        <span class="state"><span class="dot idle" id="dot"></span><span id="stateText">idle</span></span>
+      <div class="zone-body">
+        <div class="controls">
+          <button id="toggle" disabled>Start</button>
+          <span class="state"><span class="dot idle" id="dot"></span><span id="stateText">idle</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="zone" id="transcribeZone">
+      <h2 data-collapsed-hint="available once a model is loaded">Transcribe</h2>
+      <div class="zone-body">
+        <div class="drop" id="drop">
+          <input type="file" id="fileInput" hidden />
+          Drop a file here or <strong>click to browse</strong>
+          <div id="fileName"></div>
+        </div>
+        <div class="fields">
+          <div class="field">
+            <label for="tTask">Task</label>
+            <select id="tTask">
+              <option value="transcribe">Transcribe</option>
+              <option value="translate">Translate to English</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tLanguage">Language</label>
+            <input id="tLanguage" placeholder="auto" />
+          </div>
+          <div class="field">
+            <label for="tFormat">Output format</label>
+            <select id="tFormat">
+              <option>json</option><option>text</option><option>srt</option>
+              <option>vtt</option><option>verbose_json</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tPrompt">Prompt</label>
+            <input id="tPrompt" placeholder="Names, jargon, style hints…" />
+          </div>
+          <div class="field">
+            <label for="tWords">Word timestamps</label>
+            <input type="checkbox" id="tWords" />
+          </div>
+        </div>
+        <div class="controls" style="margin-top:12px">
+          <button id="tRun" disabled>Transcribe</button>
+        </div>
+        <div id="tStatus"></div>
+        <div id="tResult" hidden>
+          <pre id="tText"></pre>
+          <div class="actions">
+            <button class="secondary" id="tCopy">Copy</button>
+            <button class="secondary" id="tDownload">Download</button>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="zone">
       <h2>Live log</h2>
-      <div id="log"><div class="empty">No requests yet.</div></div>
+      <div class="zone-body">
+        <div id="log"><div class="empty">No requests yet.</div></div>
+      </div>
     </section>
   </main>
 
   <script>
     let selectedModel = null;
     let state = "idle";
+    let selectedFile = null;
+    let lastDownload = null;
 
     async function getJSON(url, opts) {
       const res = await fetch(url, opts);
@@ -143,6 +217,15 @@
       btn.disabled = s.state === "loading";
       btn.textContent = s.state === "loaded" ? "Stop" : "Start";
       btn.className = s.state === "loaded" ? "stop" : "";
+      applyPanelStates();
+    }
+
+    // Panel active/inactive lifecycle (ADR 0005): purely engine-state driven, not user-toggleable.
+    function applyPanelStates() {
+      const loaded = state === "loaded";
+      document.getElementById("settingsZone").classList.toggle("collapsed", loaded);
+      document.getElementById("transcribeZone").classList.toggle("collapsed", !loaded);
+      document.getElementById("tRun").disabled = !loaded || !selectedFile;
     }
 
     async function refreshLog() {
@@ -173,6 +256,91 @@
         alert(e.message);
       }
       await refreshStatus();
+    };
+
+    // --- Transcribe zone ---
+    const drop = document.getElementById("drop");
+    const fileInput = document.getElementById("fileInput");
+
+    function setFile(file) {
+      selectedFile = file;
+      document.getElementById("fileName").textContent = file ? file.name : "";
+      applyPanelStates();
+    }
+
+    drop.onclick = () => fileInput.click();
+    fileInput.onchange = () => setFile(fileInput.files[0] || null);
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+    drop.ondragleave = () => drop.classList.remove("over");
+    drop.ondrop = (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+    };
+
+    document.getElementById("tRun").onclick = async () => {
+      if (!selectedFile) return;
+      const task = document.getElementById("tTask").value;
+      const format = document.getElementById("tFormat").value;
+      const lang = document.getElementById("tLanguage").value.trim();
+      const prompt = document.getElementById("tPrompt").value.trim();
+      const words = document.getElementById("tWords").checked;
+
+      const form = new FormData();
+      form.append("file", selectedFile);
+      form.append("response_format", format);
+      if (prompt) form.append("prompt", prompt);
+      if (words) form.append("timestamp_granularities", "word");
+      if (task === "transcribe" && lang) form.append("language", lang);
+
+      const url = task === "translate" ? "/v1/audio/translations" : "/v1/audio/transcriptions";
+      const runBtn = document.getElementById("tRun");
+      const status = document.getElementById("tStatus");
+      const resultBox = document.getElementById("tResult");
+      runBtn.disabled = true;
+      resultBox.hidden = true;
+      status.textContent = "Transcribing…";
+
+      try {
+        const res = await fetch(url, { method: "POST", body: form });
+        if (!res.ok) {
+          let msg = res.statusText;
+          try { msg = (await res.json()).detail || msg; } catch {}
+          throw new Error(msg);
+        }
+        let text, ext;
+        if (format === "json" || format === "verbose_json") {
+          const data = await res.json();
+          text = format === "json" ? (data.text ?? "") : JSON.stringify(data, null, 2);
+          ext = "json";
+        } else {
+          text = await res.text();
+          ext = format === "text" ? "txt" : format;
+        }
+        const base = selectedFile.name.replace(/\.[^.]+$/, "") || "transcript";
+        lastDownload = { content: text, filename: `${base}.${ext}` };
+        document.getElementById("tText").textContent = text;
+        resultBox.hidden = false;
+        status.textContent = "";
+      } catch (e) {
+        status.textContent = "Error: " + e.message;
+      } finally {
+        applyPanelStates();
+      }
+    };
+
+    document.getElementById("tCopy").onclick = () => {
+      if (lastDownload) navigator.clipboard.writeText(lastDownload.content);
+    };
+
+    document.getElementById("tDownload").onclick = () => {
+      if (!lastDownload) return;
+      const blob = new Blob([lastDownload.content], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = lastDownload.filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
     };
 
     init().catch(e => { document.getElementById("hw").textContent = "Error: " + e.message; });
