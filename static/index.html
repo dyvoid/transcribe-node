@@ -387,7 +387,7 @@
       const detail = document.getElementById("stateDetail");
       detail.textContent =
         s.state === "loaded" ? `${s.model} · ${s.device}` :
-        s.state === "loading" ? (selectedModel || "") : "";
+        s.state === "loading" ? (s.model || selectedModel || "") : "";
       const btn = document.getElementById("toggle");
       btn.disabled = s.state === "loading";
       btn.textContent = s.state === "loaded" ? "Stop" : "Start";
