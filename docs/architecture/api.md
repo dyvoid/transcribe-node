@@ -120,6 +120,9 @@ Served by FastAPI at `http://localhost:9000` (default port, configurable via
 `TRANSCRIBENODE_PORT`). Opened automatically by the server on startup at the resolved
 host and port. Single screen, no navigation.
 
+Styled with a vendored snapshot of the dyvoided design system (`static/ds/`), following the OS
+light/dark preference. See [ADR 0007](../adr/0007-vendored-dyvoided-design-system.md).
+
 **Four zones, top to bottom: Settings, Engine, Transcribe, Live log.** See
 [ADR 0005](../adr/0005-ui-panel-lifecycle-and-transcribe-zone.md) for why Transcribe exists and how
 panel active/inactive state works.
