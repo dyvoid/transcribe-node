@@ -1,7 +1,17 @@
+import threading
+
 import pytest
 from stubs import StubEngine
 
-from engine import EngineManager, TranscribeOptions, _is_model_cached
+from engine import (
+    TEMPERATURE_FALLBACK,
+    EngineManager,
+    EngineNotLoadedError,
+    FasterWhisperEngine,
+    InvalidInputError,
+    TranscribeOptions,
+    _is_model_cached,
+)
 
 
 def make_manager() -> tuple[EngineManager, StubEngine]:
@@ -94,3 +104,98 @@ def test_transcribe_forwards_anti_repetition_options():
     opts = engine.calls[0][1]
     assert opts.vad_filter is False
     assert opts.condition_on_previous_text is True
+
+
+def test_transcribe_before_load_raises_not_loaded():
+    manager, _ = make_manager()
+    with pytest.raises(EngineNotLoadedError):
+        manager.transcribe("a.wav", "a.wav", TranscribeOptions())
+
+
+def test_switching_models_releases_the_old_one_first():
+    manager, engine = make_manager()
+    manager.load("large-v3", "cuda", "int8_float16")
+    engine.events.clear()
+    manager.load("small", "cuda", "int8_float16")
+    assert engine.events == ["unload", "load:small"]
+    assert manager.status()["model"] == "small"
+
+
+def test_failed_load_leaves_clean_idle_state():
+    manager, engine = make_manager()
+    manager.load("large-v3", "cuda", "int8_float16")
+    engine.load_error = RuntimeError("out of memory")
+    with pytest.raises(RuntimeError):
+        manager.load("medium", "cuda", "int8_float16")
+    assert manager.status() == {
+        "state": "idle",
+        "model": None,
+        "device": None,
+        "compute_type": None,
+    }
+    assert engine.loaded is False
+
+
+def test_load_waits_for_running_transcription():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+    started, release = threading.Event(), threading.Event()
+    original = engine.transcribe
+
+    def slow_transcribe(path, options):
+        started.set()
+        release.wait(timeout=5)
+        return original(path, options)
+
+    engine.transcribe = slow_transcribe
+    worker = threading.Thread(
+        target=manager.transcribe, args=("a.wav", "a.wav", TranscribeOptions())
+    )
+    worker.start()
+    started.wait(timeout=5)
+    loader = threading.Thread(target=manager.load, args=("medium", "cpu", "int8"))
+    loader.start()
+    loader.join(timeout=0.2)
+    assert loader.is_alive(), "load must not start while a transcription holds the model"
+    release.set()
+    worker.join(timeout=5)
+    loader.join(timeout=5)
+    assert manager.log_entries()[0]["model"] == "small"
+    assert manager.status()["model"] == "medium"
+
+
+class _FakeWhisperModel:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.kwargs: dict[str, object] = {}
+        self.error = error
+
+    def transcribe(self, audio_path, **kwargs):
+        self.kwargs = kwargs
+        if self.error is not None:
+            raise self.error
+        info = type("Info", (), {"language": "en", "duration": 1.0})()
+        return iter([]), info
+
+
+def _engine_with(model: _FakeWhisperModel) -> FasterWhisperEngine:
+    engine = FasterWhisperEngine()
+    engine._model = model  # type: ignore[assignment]
+    return engine
+
+
+def test_temperature_zero_enables_fallback_schedule():
+    model = _FakeWhisperModel()
+    _engine_with(model).transcribe("a.wav", TranscribeOptions(temperature=0.0))
+    assert model.kwargs["temperature"] == TEMPERATURE_FALLBACK
+
+
+def test_nonzero_temperature_is_passed_through():
+    model = _FakeWhisperModel()
+    _engine_with(model).transcribe("a.wav", TranscribeOptions(temperature=0.4))
+    assert model.kwargs["temperature"] == 0.4
+
+
+def test_backend_value_errors_become_invalid_input():
+    model = _FakeWhisperModel(ValueError("'xx' is not a valid language code"))
+    with pytest.raises(InvalidInputError):
+        _engine_with(model).transcribe("a.wav", TranscribeOptions(language="xx"))

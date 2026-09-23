@@ -47,6 +47,20 @@ def _is_model_cached(model: str, download_root: Path) -> bool:
     return any(token in entry.name for entry in download_root.glob("*") if entry.is_dir())
 
 
+# faster-whisper's default fallback schedule. OpenAI documents temperature=0 as "start greedy and
+# raise the temperature when a segment fails the log-prob/compression checks"; a bare 0.0 would
+# disable that retry, which is Whisper's main guard against repetition loops.
+TEMPERATURE_FALLBACK = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+
+
+class EngineNotLoadedError(RuntimeError):
+    """Raised when work is requested but no model is loaded."""
+
+
+class InvalidInputError(ValueError):
+    """The backend rejected the request's audio or parameters (undecodable file, bad language)."""
+
+
 @dataclass
 class Word:
     word: str
@@ -141,19 +155,28 @@ class FasterWhisperEngine(TranscriptionEngine):
 
     def transcribe(self, audio_path: str, options: TranscribeOptions) -> TranscriptionResult:
         if self._model is None:
-            raise RuntimeError("Engine has no model loaded.")
+            raise EngineNotLoadedError("Engine has no model loaded.")
+        from av.error import FFmpegError
 
-        segments_gen, info = self._model.transcribe(
-            audio_path,
-            task=options.task,
-            language=options.language,
-            initial_prompt=options.prompt,
-            temperature=options.temperature,
-            word_timestamps=options.word_timestamps,
-            vad_filter=options.vad_filter,
-            condition_on_previous_text=options.condition_on_previous_text,
-        )
+        temperature = TEMPERATURE_FALLBACK if options.temperature == 0 else options.temperature
+        try:
+            segments_gen, info = self._model.transcribe(
+                audio_path,
+                task=options.task,
+                language=options.language,
+                initial_prompt=options.prompt,
+                temperature=temperature,
+                word_timestamps=options.word_timestamps,
+                vad_filter=options.vad_filter,
+                condition_on_previous_text=options.condition_on_previous_text,
+            )
+            # Segments are produced lazily, so decoding can still fail while iterating.
+            return self._collect(segments_gen, info, options)
+        except (ValueError, FFmpegError) as exc:
+            raise InvalidInputError(str(exc)) from exc
 
+    @staticmethod
+    def _collect(segments_gen, info, options: TranscribeOptions) -> TranscriptionResult:
         segments: list[Segment] = []
         texts: list[str] = []
         for index, seg in enumerate(segments_gen):
@@ -204,28 +227,37 @@ class EngineManager:
         }
 
     def load(self, model: str, device: str, compute_type: str) -> dict[str, object]:
+        # Lock order is always state -> infer. Holding the infer lock waits out any running
+        # transcription, and releasing the current model first means two models never share memory.
         with self._state_lock:
             self._state = "loading"
-            try:
-                self._engine.load(model, device, compute_type, self._download_root)
-            except Exception:
-                self._state = "idle"
-                self._model = None
-                raise
-            self._model = model
-            self._device = device
-            self._compute_type = compute_type
-            self._state = "loaded"
+            with self._infer_lock:
+                self._engine.unload()
+                self._clear()
+                self._state = "loading"
+                try:
+                    self._engine.load(model, device, compute_type, self._download_root)
+                except Exception:
+                    self._engine.unload()
+                    self._clear()
+                    raise
+                self._model = model
+                self._device = device
+                self._compute_type = compute_type
+                self._state = "loaded"
         return self.status()
 
     def unload(self) -> dict[str, object]:
-        with self._state_lock:
+        with self._state_lock, self._infer_lock:
             self._engine.unload()
-            self._state = "idle"
-            self._model = None
-            self._device = None
-            self._compute_type = None
+            self._clear()
         return self.status()
+
+    def _clear(self) -> None:
+        self._state = "idle"
+        self._model = None
+        self._device = None
+        self._compute_type = None
 
     @property
     def is_loaded(self) -> bool:
@@ -235,16 +267,20 @@ class EngineManager:
         self, audio_path: str, filename: str, options: TranscribeOptions
     ) -> TranscriptionResult:
         if not self.is_loaded:
-            raise RuntimeError("No model loaded. Load a model before transcribing.")
+            raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")
 
         started = time.perf_counter()
         with self._infer_lock:
+            # Re-check under the lock: an unload or model switch may have run while this waited.
+            if not self.is_loaded:
+                raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")
             try:
                 result = self._engine.transcribe(audio_path, options)
             except Exception:
                 self._record(filename, time.perf_counter() - started, "error")
                 raise
-        self._record(filename, time.perf_counter() - started, "ok")
+            # Recorded under the lock so the entry names the model that actually ran.
+            self._record(filename, time.perf_counter() - started, "ok")
         return result
 
     def log_entries(self) -> list[dict[str, object]]:

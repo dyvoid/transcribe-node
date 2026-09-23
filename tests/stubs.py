@@ -11,16 +11,26 @@ class StubEngine(TranscriptionEngine):
         self.load_args: tuple[str, str, str, str] | None = None
         self.calls: list[tuple[str, TranscribeOptions]] = []
         self.raise_on_transcribe = False
+        self.transcribe_error: Exception | None = None
+        self.load_error: Exception | None = None
+        # Ordered record of load/unload calls, e.g. ["unload", "load:small"].
+        self.events: list[str] = []
 
     def load(self, model: str, device: str, compute_type: str, download_root: str) -> None:
+        self.events.append(f"load:{model}")
+        if self.load_error is not None:
+            raise self.load_error
         self.loaded = True
         self.load_args = (model, device, compute_type, download_root)
 
     def unload(self) -> None:
+        self.events.append("unload")
         self.loaded = False
 
     def transcribe(self, audio_path: str, options: TranscribeOptions) -> TranscriptionResult:
         self.calls.append((audio_path, options))
+        if self.transcribe_error is not None:
+            raise self.transcribe_error
         if self.raise_on_transcribe:
             raise RuntimeError("boom")
         return TranscriptionResult(

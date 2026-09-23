@@ -24,13 +24,22 @@ def to_verbose_json(result: TranscriptionResult) -> dict[str, object]:
             entry["words"] = [{"word": w.word, "start": w.start, "end": w.end} for w in seg.words]
         segments.append(entry)
 
-    return {
+    body: dict[str, object] = {
         "task": result.task,
         "language": result.language,
         "duration": result.duration,
         "text": result.text,
         "segments": segments,
     }
+    # OpenAI returns word timings as a flat top-level list; per-segment copies are kept for
+    # existing callers.
+    if any(seg.words is not None for seg in result.segments):
+        body["words"] = [
+            {"word": w.word, "start": w.start, "end": w.end}
+            for seg in result.segments
+            for w in seg.words or []
+        ]
+    return body
 
 
 def to_srt(segments: list[Segment]) -> str:
