@@ -300,7 +300,8 @@ class EngineManager:
 
     def ensure_loaded(self) -> None:
         if self._state == "loading":
-            incoming = self._pending[0] if self._pending else "unknown"
+            pending = self._pending  # read once: a finishing load() may reset it concurrently
+            incoming = pending[0] if pending else "unknown"
             raise EngineNotLoadedError(
                 f"Model '{incoming}' is loading. Retry once the engine reports loaded."
             )
