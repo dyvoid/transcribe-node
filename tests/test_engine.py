@@ -263,3 +263,56 @@ def test_server_side_ffmpeg_errors_are_not_invalid_input():
     with pytest.raises(Exception) as info:
         _engine_with(model).transcribe("a.wav", TranscribeOptions())
     assert not isinstance(info.value, InvalidInputError)
+
+
+def test_failing_unload_during_load_does_not_stick_in_loading():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+
+    def broken_unload():
+        raise RuntimeError("driver error")
+
+    engine.unload = broken_unload
+    with pytest.raises(RuntimeError):
+        manager.load("medium", "cpu", "int8")
+    assert manager.status()["state"] == "idle"
+
+
+def test_failing_unload_still_clears_state():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+
+    def broken_unload():
+        raise RuntimeError("driver error")
+
+    engine.unload = broken_unload
+    with pytest.raises(RuntimeError):
+        manager.unload()
+    assert manager.status()["state"] == "idle"
+
+
+def test_log_names_running_model_even_if_switch_is_requested_mid_job():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+    started, release = threading.Event(), threading.Event()
+    original = engine.transcribe
+
+    def slow_transcribe(path, options):
+        started.set()
+        release.wait(timeout=5)
+        return original(path, options)
+
+    engine.transcribe = slow_transcribe
+    worker = threading.Thread(
+        target=manager.transcribe, args=("a.wav", "a.wav", TranscribeOptions())
+    )
+    worker.start()
+    started.wait(timeout=5)
+    loader = threading.Thread(target=manager.load, args=("medium", "cpu", "int8"))
+    loader.start()
+    loader.join(timeout=0.2)
+    assert manager._model == "small", "loaded-model fields must not change before the job ends"
+    release.set()
+    worker.join(timeout=5)
+    loader.join(timeout=5)
+    assert manager.log_entries()[0]["model"] == "small"
