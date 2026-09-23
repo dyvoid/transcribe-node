@@ -1,168 +1,283 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TranscribeNode</title>
+  <script>
+    // Dark-first, light as a peer: follow the OS preference (dyvoided themes key off data-theme).
+    (() => {
+      const mq = matchMedia("(prefers-color-scheme: light)");
+      const apply = () => { document.documentElement.dataset.theme = mq.matches ? "light" : "dark"; };
+      apply();
+      mq.addEventListener("change", apply);
+    })();
+  </script>
+  <!-- Fonts are the only external request; without network the stacks fall back to system fonts. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="/static/ds/styles.css" />
   <style>
+    /* App layout and the few pieces dyvoided has no component for. Tokens only, no hues. */
     :root { color-scheme: dark; }
+    [data-theme="light"] { color-scheme: light; }
     * { box-sizing: border-box; }
     body {
-      margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6;
-      display: flex; flex-direction: column; min-height: 100vh;
+      margin: 0; min-height: 100vh; background: var(--surface-app); color: var(--text-primary);
+      font-family: var(--font-body); font-size: var(--font-size-base); line-height: var(--leading-snug);
     }
-    header { padding: 16px 24px; border-bottom: 1px solid #262a33; }
-    header h1 { margin: 0; font-size: 18px; }
-    header .sub { color: #8b93a1; font-size: 13px; margin-top: 4px; }
-    main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 24px; max-width: 900px; width: 100%; margin: 0 auto; }
-    .zone { background: #171a21; border: 1px solid #262a33; border-radius: 10px; padding: 16px; }
-    .zone h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: #8b93a1; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #21252e; }
-    th { color: #8b93a1; font-weight: 500; }
-    tr.model-row { cursor: pointer; }
-    tr.model-row.selected { background: #1d2a44; }
-    tr.model-row.recommended td:first-child::after { content: " ★ recommended"; color: #7dd3fc; font-size: 11px; }
-    .fields { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
-    .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-    .field label { color: #8b93a1; }
-    .field.grow { flex: 1; min-width: 220px; }
-    .checks { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 14px; }
-    .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #8b93a1; cursor: pointer; }
-    .check input { accent-color: #2563eb; }
-    input, select { background: #0f1115; color: #e6e6e6; border: 1px solid #333a47; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
-    .controls { display: flex; align-items: center; gap: 16px; }
-    button { background: #2563eb; color: white; border: 0; border-radius: 8px; padding: 12px 28px; font-size: 15px; cursor: pointer; }
-    button.stop { background: #b91c1c; }
-    button:disabled { opacity: .5; cursor: default; }
-    .state { font-size: 13px; color: #8b93a1; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #6b7280; }
-    .dot.loaded { background: #22c55e; } .dot.loading { background: #eab308; } .dot.idle { background: #6b7280; }
-    #log { font-family: ui-monospace, monospace; font-size: 12px; max-height: 260px; overflow-y: auto; }
-    #log .entry { padding: 4px 0; border-bottom: 1px solid #21252e; display: flex; gap: 12px; }
-    #log .ok { color: #22c55e; } #log .error { color: #ef4444; }
-    .empty { color: #6b7280; font-size: 13px; }
+    .mono { font-family: var(--font-mono); font-feature-settings: var(--tnum); }
+
+    header {
+      max-width: 960px; margin: 0 auto; padding: var(--space-8) var(--space-6) var(--space-2);
+      display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-xl);
+      letter-spacing: var(--tracking-tight); line-height: var(--leading-tight);
+    }
+    #hw { font-size: var(--font-size-xs); color: var(--text-tertiary); }
+    main {
+      max-width: 960px; margin: 0 auto; padding: var(--space-5) var(--space-6) var(--space-10);
+      display: flex; flex-direction: column; gap: var(--space-5);
+    }
 
     /* Panel active/inactive lifecycle (ADR 0005): non-interactive, header-only when collapsed. */
-    .zone.collapsed { opacity: .45; }
-    .zone.collapsed .zone-body { display: none; }
-    .zone.collapsed h2 { margin: 0; }
-    .zone.collapsed h2::after { content: attr(data-collapsed-hint); color: #6b7280; font-size: 11px; text-transform: none; letter-spacing: normal; margin-left: 8px; }
-    .zone.locked .zone-body { pointer-events: none; }
+    .ds-panel { transition: opacity var(--duration-base) var(--ease-standard); }
+    .ds-panel.collapsed { opacity: .5; }
+    .ds-panel.collapsed .ds-panel-body { display: none; }
+    .ds-panel.collapsed .ds-panel-head { border-bottom-color: transparent; }
+    .ds-panel-title { margin: 0; }
+    .panel-hint { font-size: var(--font-size-xs); color: var(--text-tertiary); display: none; }
+    .ds-panel.collapsed .panel-hint { display: inline; }
+    .ds-panel-body { color: var(--text-primary); }
 
-    .drop { border: 1px dashed #3a4150; border-radius: 8px; padding: 24px; text-align: center; color: #8b93a1; font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
-    .drop.over { border-color: #2563eb; background: #14203a; color: #cbd5e1; }
-    .drop strong { color: #e6e6e6; }
-    button.secondary { background: #2a2f3a; padding: 8px 16px; font-size: 13px; }
-    #tResult { margin-top: 16px; }
-    #tResult pre { background: #0f1115; border: 1px solid #262a33; border-radius: 8px; padding: 12px; font-family: ui-monospace, monospace; font-size: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
-    #tResult .actions { display: flex; gap: 8px; margin-top: 8px; }
-    #tStatus { font-size: 13px; color: #8b93a1; margin-top: 12px; }
+    /* Model picker: DataTable with a selectable row. */
+    .model-row { cursor: pointer; }
+    .model-row td { transition: background var(--duration-fast) var(--ease-standard); }
+    .model-row.selected td { background: var(--primary-muted-bg); }
+    .model-row.selected:hover td { background: var(--primary-muted-bg); }
+    .model-row.selected td:first-child { box-shadow: inset 2px 0 0 var(--primary); }
+    .model-row:focus-visible { outline: none; }
+    .model-row:focus-visible td { background: var(--surface-active); }
+    .model-row td:first-child { font-family: var(--font-mono); font-weight: 500; white-space: nowrap; }
+    .model-row .ds-badge { margin-left: var(--space-2); vertical-align: 1px; }
+    .ds-table td.muted { color: var(--text-secondary); }
+
+    .fields { display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-5); }
+    .fields .ds-input-field { flex: 1 1 150px; }
+    .fields .grow { flex-grow: 3; }
+    .ds-input:disabled { color: var(--text-tertiary); cursor: default; }
+
+    /* Native <select> in dyvoided's field chrome. The DS Select is a scripted combobox; a styled
+       native element keeps the platform's keyboard and screen-reader behaviour for free. */
+    .select-native { position: relative; padding: 0; }
+    .select-native:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
+    .select-native select {
+      appearance: none; width: 100%; height: 100%; padding: 0 32px 0 var(--space-3); margin: 0;
+      background: transparent; border: 0; outline: none; color: inherit; font: inherit; cursor: pointer;
+    }
+    .select-native option { background: var(--surface-overlay); color: var(--text-primary); }
+    .select-native .ds-select-chev { position: absolute; right: 10px; pointer-events: none; color: var(--text-tertiary); }
+
+    .checks { display: flex; gap: var(--space-6); flex-wrap: wrap; margin-top: var(--space-5); }
+    .checks .ds-check { position: relative; }
+    .checks .ds-check-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
+
+    .engine-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+    .engine-row .ds-btn { min-width: 96px; }
+    .engine-state { display: flex; align-items: center; gap: var(--space-3); }
+    #stateDetail { font-size: var(--font-size-sm); color: var(--text-secondary); }
+    .ds-spinner.inline { width: 14px; height: 14px; }
+    /* Neutral badge fill is near the panel surface in light theme; a hairline keeps the state legible. */
+    #stateBadge.ds-badge-neutral { box-shadow: inset 0 0 0 1px var(--border-subtle); }
+
+    .drop {
+      display: flex; flex-direction: column; align-items: center; gap: var(--space-2); width: 100%;
+      padding: var(--space-7) var(--space-6); text-align: center; cursor: pointer;
+      border: var(--border-width) dashed var(--border-strong); border-radius: var(--radius-md);
+      background: var(--surface-sunken); box-shadow: var(--inset-rail);
+      color: var(--text-secondary); font: inherit; font-size: var(--font-size-sm);
+      transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
+    }
+    .drop:hover { border-color: var(--text-tertiary); }
+    .drop.over { border-color: var(--primary); background: var(--primary-muted-bg); color: var(--text-primary); }
+    .drop strong { color: var(--text-primary); font-weight: 600; }
+    #fileName { font-size: var(--font-size-xs); color: var(--text-primary); }
+    #fileName:empty { display: none; }
+
+    .run-row { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-5); flex-wrap: wrap; }
+    #tStatus { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
+    #tStatus.error { color: var(--danger-400); }
+    #tResult { margin-top: var(--space-5); }
+    #tResult pre {
+      margin: 0; padding: var(--space-4); max-height: 320px; white-space: pre-wrap; word-break: break-word;
+      background: var(--surface-sunken); border: var(--border-width) solid var(--border-subtle);
+      border-radius: var(--radius-md); box-shadow: var(--inset-rail);
+      font-family: var(--font-mono); font-size: var(--font-size-xs); line-height: var(--leading-body); color: var(--text-primary);
+    }
+    #tResult .actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+
+    .log-scroll { max-height: 280px; overflow: auto; }
+    .log-scroll thead th { position: sticky; top: 0; z-index: 1; }
+    .ds-table td.mono { font-size: var(--font-size-xs); color: var(--text-secondary); white-space: nowrap; }
+    .ds-table td.file { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-empty { padding: var(--space-5) var(--space-4); color: var(--text-tertiary); font-size: var(--font-size-sm); }
+
+    #toasts {
+      position: fixed; top: var(--space-5); right: var(--space-5); z-index: 100;
+      display: flex; flex-direction: column; gap: var(--space-2); width: min(360px, calc(100vw - 2 * var(--space-5)));
+    }
+    .ds-toast-close { padding: 0; }
+    .ds-toast-close svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    @media (max-width: 640px) {
+      header, main { padding-left: var(--space-4); padding-right: var(--space-4); }
+      .ds-panel-body { padding: var(--space-4); }
+      .ds-panel-head { padding: var(--space-3) var(--space-4); }
+      .hide-narrow { display: none; }
+      .ds-table td.file { max-width: 28vw; }
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>TranscribeNode</h1>
-    <div class="sub" id="hw">Detecting hardware…</div>
+    <div id="hw" class="mono">Detecting hardware…</div>
   </header>
   <main>
-    <section class="zone" id="settingsZone">
-      <h2 data-collapsed-hint="locked while engine is running">Settings</h2>
-      <div class="zone-body">
-        <table id="models">
-          <thead>
-            <tr><th>Model</th><th>VRAM</th><th>Quality</th><th>Use case</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+    <section class="ds-panel" id="settingsZone" aria-labelledby="settingsTitle">
+      <div class="ds-panel-head">
+        <h2 class="ds-panel-title" id="settingsTitle">Settings</h2>
+        <span class="panel-hint">Locked while the engine is running</span>
+      </div>
+      <div class="ds-panel-body">
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="models">
+            <thead>
+              <tr><th>Model</th><th class="num">Memory</th><th>Quality</th><th class="hide-narrow">Use case</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
         <div class="fields">
-          <div class="field">
-            <label for="language">Language</label>
-            <input id="language" placeholder="auto" />
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="language">Language</label>
+            <div class="ds-input-box"><input class="ds-input" id="language" placeholder="Auto-detect" /></div>
           </div>
-          <div class="field">
-            <label for="format">Response format</label>
-            <select id="format">
-              <option>json</option><option>text</option><option>srt</option>
-              <option>vtt</option><option>verbose_json</option>
-            </select>
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="format">Response format</label>
+            <div class="ds-select-field select-native">
+              <select id="format">
+                <option>json</option><option>text</option><option>srt</option>
+                <option>vtt</option><option>verbose_json</option>
+              </select>
+              <svg class="ds-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
           </div>
-          <div class="field">
-            <label for="port">Port</label>
-            <input id="port" disabled />
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="port">Port</label>
+            <div class="ds-input-box"><input class="ds-input mono" id="port" disabled /></div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="zone">
-      <h2>Engine</h2>
-      <div class="zone-body">
-        <div class="controls">
-          <button id="toggle" disabled>Start</button>
-          <span class="state"><span class="dot idle" id="dot"></span><span id="stateText">idle</span></span>
+    <section class="ds-panel" aria-labelledby="engineTitle">
+      <div class="ds-panel-head">
+        <h2 class="ds-panel-title" id="engineTitle">Engine</h2>
+      </div>
+      <div class="ds-panel-body">
+        <div class="engine-row">
+          <button class="ds-btn ds-btn-primary" id="toggle" disabled>Start</button>
+          <div class="engine-state" aria-live="polite">
+            <span class="ds-badge ds-badge-neutral" id="stateBadge">Idle</span>
+            <span id="stateDetail" class="mono"></span>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="zone" id="transcribeZone">
-      <h2 data-collapsed-hint="available once a model is loaded">Transcribe</h2>
-      <div class="zone-body">
-        <div class="drop" id="drop">
-          <input type="file" id="fileInput" hidden />
-          Drop a file here or <strong>click to browse</strong>
-          <div id="fileName"></div>
-        </div>
+    <section class="ds-panel" id="transcribeZone" aria-labelledby="transcribeTitle">
+      <div class="ds-panel-head">
+        <h2 class="ds-panel-title" id="transcribeTitle">Transcribe</h2>
+        <span class="panel-hint">Available once a model is loaded</span>
+      </div>
+      <div class="ds-panel-body">
+        <input type="file" id="fileInput" hidden />
+        <button type="button" class="drop" id="drop">
+          <span>Drop a file here or <strong>browse</strong></span>
+          <span id="fileName" class="mono"></span>
+        </button>
         <div class="fields">
-          <div class="field">
-            <label for="tTask">Task</label>
-            <select id="tTask">
-              <option value="transcribe">Transcribe</option>
-              <option value="translate">Translate to English</option>
-            </select>
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="tTask">Task</label>
+            <div class="ds-select-field select-native">
+              <select id="tTask">
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate to English</option>
+              </select>
+              <svg class="ds-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
           </div>
-          <div class="field">
-            <label for="tLanguage">Language</label>
-            <input id="tLanguage" placeholder="auto" />
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="tLanguage">Language</label>
+            <div class="ds-input-box"><input class="ds-input" id="tLanguage" placeholder="Auto-detect" /></div>
           </div>
-          <div class="field">
-            <label for="tFormat">Output format</label>
-            <select id="tFormat">
-              <option>text</option><option>json</option><option>srt</option>
-              <option>vtt</option><option>verbose_json</option>
-            </select>
+          <div class="ds-input-field">
+            <label class="ds-input-label" for="tFormat">Output format</label>
+            <div class="ds-select-field select-native">
+              <select id="tFormat">
+                <option>text</option><option>json</option><option>srt</option>
+                <option>vtt</option><option>verbose_json</option>
+              </select>
+              <svg class="ds-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
           </div>
-          <div class="field grow">
-            <label for="tPrompt">Prompt</label>
-            <input id="tPrompt" placeholder="Names, jargon, style hints…" />
+          <div class="ds-input-field grow">
+            <label class="ds-input-label" for="tPrompt">Prompt</label>
+            <div class="ds-input-box"><input class="ds-input" id="tPrompt" placeholder="Names, jargon, style hints" /></div>
           </div>
         </div>
         <div class="checks">
-          <label class="check"><input type="checkbox" id="tWords" /> Word timestamps</label>
-          <label class="check"><input type="checkbox" id="tVad" checked /> Filter silence/noise (VAD)</label>
-          <label class="check"><input type="checkbox" id="tCondition" /> Condition on previous text</label>
+          <label class="ds-check"><input type="checkbox" data-ds-peer id="tWords" /><span class="ds-checkbox" data-ds-peer-target></span><span class="ds-check-label">Word timestamps</span></label>
+          <label class="ds-check"><input type="checkbox" data-ds-peer id="tVad" checked /><span class="ds-checkbox" data-ds-peer-target></span><span class="ds-check-label">Filter silence and noise (VAD)</span></label>
+          <label class="ds-check"><input type="checkbox" data-ds-peer id="tCondition" /><span class="ds-checkbox" data-ds-peer-target></span><span class="ds-check-label">Condition on previous text</span></label>
         </div>
-        <div class="controls" style="margin-top:12px">
-          <button id="tRun" disabled>Transcribe</button>
+        <div class="run-row">
+          <button class="ds-btn ds-btn-primary" id="tRun" disabled>Transcribe</button>
+          <div id="tStatus" aria-live="polite"></div>
         </div>
-        <div id="tStatus"></div>
         <div id="tResult" hidden>
           <pre id="tText"></pre>
           <div class="actions">
-            <button class="secondary" id="tCopy">Copy</button>
-            <button class="secondary" id="tDownload">Download</button>
+            <button class="ds-btn ds-btn-secondary ds-btn-sm" id="tCopy">Copy</button>
+            <button class="ds-btn ds-btn-secondary ds-btn-sm" id="tDownload">Download</button>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="zone">
-      <h2>Live log</h2>
-      <div class="zone-body">
-        <div id="log"><div class="empty">No requests yet.</div></div>
+    <section class="ds-panel" aria-labelledby="logTitle">
+      <div class="ds-panel-head">
+        <h2 class="ds-panel-title" id="logTitle">Live log</h2>
+      </div>
+      <div class="ds-panel-body">
+        <div class="ds-table-wrap log-scroll">
+          <table class="ds-table" id="logTable" hidden>
+            <thead>
+              <tr><th>Time</th><th>File</th><th class="hide-narrow">Model</th><th class="num">Duration</th><th>Status</th></tr>
+            </thead>
+            <tbody id="log"></tbody>
+          </table>
+          <div class="log-empty" id="logEmpty">No requests yet.</div>
+        </div>
       </div>
     </section>
   </main>
+
+  <div id="toasts"></div>
 
   <script>
     let selectedModel = null;
@@ -170,10 +285,39 @@
     let selectedFile = null;
     let lastDownload = null;
 
+    const STATE_BADGE = {
+      idle: ["neutral", "Idle"],
+      loading: ["warning", "Loading"],
+      loaded: ["success", "Loaded"],
+    };
+
     async function getJSON(url, opts) {
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
       return res.json();
+    }
+
+    // Build elements with textContent so server-supplied strings (filenames, model ids) are never parsed as HTML.
+    function el(tag, props = {}, children = []) {
+      const node = document.createElement(tag);
+      Object.assign(node, props);
+      for (const child of children) node.append(child);
+      return node;
+    }
+
+    function toast(title, message) {
+      const close = el("button", { className: "ds-toast-close", type: "button", ariaLabel: "Dismiss" });
+      close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+      const node = el("div", { className: "ds-toast", role: "alert" }, [
+        el("span", { className: "ds-toast-dot danger" }),
+        el("div", { className: "ds-toast-body" }, [
+          el("div", { className: "ds-toast-title", textContent: title }),
+          el("div", { className: "ds-toast-msg", textContent: message }),
+        ]),
+        close,
+      ]);
+      close.onclick = () => node.remove();
+      document.getElementById("toasts").append(node);
     }
 
     async function init() {
@@ -182,7 +326,7 @@
         getJSON("/v1/models"),
       ]);
       document.getElementById("hw").textContent =
-        `${sys.device.toUpperCase()} · ${sys.compute_type} · ${sys.available_memory_gb} GB available` +
+        `${sys.device.toUpperCase()} · ${sys.compute_type} · ${sys.available_memory_gb} GB free` +
         (sys.gpu_name ? ` · ${sys.gpu_name}` : "");
       document.getElementById("port").value = location.port || "9000";
       renderModels(models.data, sys.recommended_model);
@@ -193,64 +337,106 @@
       setInterval(refreshLog, 2000);
     }
 
+    function selectModel(id) {
+      if (state !== "loaded") { selectedModel = id; highlight(); }
+    }
+
     function renderModels(models, recommended) {
       const tbody = document.querySelector("#models tbody");
-      tbody.innerHTML = "";
+      tbody.replaceChildren();
       for (const m of models) {
-        const tr = document.createElement("tr");
-        tr.className = "model-row" + (m.id === recommended ? " recommended" : "");
+        const name = el("td", { textContent: m.id });
+        if (m.id === recommended) {
+          name.append(el("span", { className: "ds-badge ds-badge-accent", textContent: "Recommended" }));
+        }
+        const tr = el("tr", { className: "model-row", tabIndex: 0 }, [
+          name,
+          el("td", { className: "num", textContent: `~${m.vram_gb} GB` }),
+          el("td", { className: "muted", textContent: m.quality }),
+          el("td", { className: "muted hide-narrow", textContent: m.use_case }),
+        ]);
         tr.dataset.model = m.id;
-        tr.innerHTML = `<td>${m.id}</td><td>~${m.vram_gb}GB</td><td>${m.quality}</td><td>${m.use_case}</td>`;
-        tr.onclick = () => { if (state !== "loaded") { selectedModel = m.id; highlight(); } };
-        tbody.appendChild(tr);
+        tr.onclick = () => selectModel(m.id);
+        tr.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectModel(m.id); }
+        };
+        tbody.append(tr);
       }
     }
 
     function highlight() {
       document.querySelectorAll(".model-row").forEach(tr => {
-        tr.classList.toggle("selected", tr.dataset.model === selectedModel);
+        const on = tr.dataset.model === selectedModel;
+        tr.classList.toggle("selected", on);
+        tr.setAttribute("aria-selected", String(on));
       });
     }
 
     async function refreshStatus() {
       const s = await getJSON("/engine/status");
       state = s.state;
-      document.getElementById("dot").className = "dot " + s.state;
-      document.getElementById("stateText").textContent =
-        s.state === "loaded" ? `loaded: ${s.model} (${s.device})` : s.state;
+      const [tone, label] = STATE_BADGE[s.state] || STATE_BADGE.idle;
+      const badge = document.getElementById("stateBadge");
+      badge.className = `ds-badge ds-badge-${tone}`;
+      badge.textContent = label;
+      const detail = document.getElementById("stateDetail");
+      detail.textContent =
+        s.state === "loaded" ? `${s.model} · ${s.device}` :
+        s.state === "loading" ? (selectedModel || "") : "";
       const btn = document.getElementById("toggle");
       btn.disabled = s.state === "loading";
       btn.textContent = s.state === "loaded" ? "Stop" : "Start";
-      btn.className = s.state === "loaded" ? "stop" : "";
+      btn.className = "ds-btn " + (s.state === "loaded" ? "ds-btn-danger" : "ds-btn-primary");
       applyPanelStates();
     }
 
     // Panel active/inactive lifecycle (ADR 0005): purely engine-state driven, not user-toggleable.
     function applyPanelStates() {
       const loaded = state === "loaded";
-      document.getElementById("settingsZone").classList.toggle("collapsed", loaded);
-      document.getElementById("transcribeZone").classList.toggle("collapsed", !loaded);
+      const settings = document.getElementById("settingsZone");
+      const transcribe = document.getElementById("transcribeZone");
+      settings.classList.toggle("collapsed", loaded);
+      transcribe.classList.toggle("collapsed", !loaded);
+      settings.querySelector(".ds-panel-body").inert = loaded;
+      transcribe.querySelector(".ds-panel-body").inert = !loaded;
       document.getElementById("tRun").disabled = !loaded || !selectedFile;
+    }
+
+    // The log is in-memory for this server run, so local wall-clock time is enough; the full ISO stamp is in the tooltip.
+    function formatTime(iso) {
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleTimeString([], { hour12: false });
     }
 
     async function refreshLog() {
       const { entries } = await getJSON("/engine/log");
-      const log = document.getElementById("log");
-      if (!entries.length) { log.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
-      log.innerHTML = entries.map(e =>
-        `<div class="entry"><span>${e.timestamp}</span><span>${e.filename}</span>` +
-        `<span>${e.model}</span><span>${e.processing_seconds}s</span>` +
-        `<span class="${e.status}">${e.status}</span></div>`
-      ).join("");
+      document.getElementById("logTable").hidden = !entries.length;
+      document.getElementById("logEmpty").hidden = !!entries.length;
+      document.getElementById("log").replaceChildren(...entries.map(e => {
+        const tone = e.status === "ok" ? "success" : "danger";
+        return el("tr", {}, [
+          el("td", { className: "mono", textContent: formatTime(e.timestamp), title: e.timestamp }),
+          el("td", { className: "file", textContent: e.filename, title: e.filename }),
+          el("td", { className: "mono hide-narrow", textContent: e.model }),
+          el("td", { className: "num", textContent: `${e.processing_seconds.toFixed(2)} s` }),
+          el("td", {}, [el("span", { className: `ds-badge ds-badge-${tone}`, textContent: e.status })]),
+        ]);
+      }));
     }
 
     document.getElementById("toggle").onclick = async () => {
       const btn = document.getElementById("toggle");
       btn.disabled = true;
+      const unloading = state === "loaded";
       try {
-        if (state === "loaded") {
+        if (unloading) {
           await getJSON("/engine/unload", { method: "POST" });
         } else {
+          state = "loading";
+          const badge = document.getElementById("stateBadge");
+          badge.className = "ds-badge ds-badge-warning";
+          badge.textContent = "Loading";
+          document.getElementById("stateDetail").textContent = selectedModel || "";
           await getJSON("/engine/load", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -258,10 +444,21 @@
           });
         }
       } catch (e) {
-        alert(e.message);
+        toast(unloading ? "Couldn't stop the engine" : "Couldn't load the model", e.message);
       }
       await refreshStatus();
     };
+
+    // --- Checkboxes: dyvoided paints .on on the visible peer; the native input stays the source of truth. ---
+    function syncCheck(input) {
+      const box = input.nextElementSibling;
+      box.classList.toggle("on", input.checked);
+      box.replaceChildren(...(input.checked ? [el("span", { className: "ds-checkbox-inner" })] : []));
+    }
+    document.querySelectorAll(".ds-check input[data-ds-peer]").forEach(input => {
+      syncCheck(input);
+      input.addEventListener("change", () => syncCheck(input));
+    });
 
     // --- Transcribe zone ---
     const drop = document.getElementById("drop");
@@ -282,6 +479,12 @@
       drop.classList.remove("over");
       if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
     };
+
+    function setStatus(text, { busy = false, error = false } = {}) {
+      const status = document.getElementById("tStatus");
+      status.className = error ? "error" : "";
+      status.replaceChildren(...(busy ? [el("span", { className: "ds-spinner inline", ariaHidden: "true" })] : []), text);
+    }
 
     document.getElementById("tRun").onclick = async () => {
       if (!selectedFile) return;
@@ -304,11 +507,10 @@
 
       const url = task === "translate" ? "/v1/audio/translations" : "/v1/audio/transcriptions";
       const runBtn = document.getElementById("tRun");
-      const status = document.getElementById("tStatus");
       const resultBox = document.getElementById("tResult");
       runBtn.disabled = true;
       resultBox.hidden = true;
-      status.textContent = "Transcribing…";
+      setStatus(task === "translate" ? "Translating…" : "Transcribing…", { busy: true });
 
       try {
         const res = await fetch(url, { method: "POST", body: form });
@@ -330,16 +532,24 @@
         lastDownload = { content: text, filename: `${base}.${ext}` };
         document.getElementById("tText").textContent = text;
         resultBox.hidden = false;
-        status.textContent = "";
+        setStatus("");
       } catch (e) {
-        status.textContent = "Error: " + e.message;
+        setStatus(e.message, { error: true });
       } finally {
         applyPanelStates();
       }
     };
 
-    document.getElementById("tCopy").onclick = () => {
-      if (lastDownload) navigator.clipboard.writeText(lastDownload.content);
+    document.getElementById("tCopy").onclick = async () => {
+      if (!lastDownload) return;
+      const btn = document.getElementById("tCopy");
+      try {
+        await navigator.clipboard.writeText(lastDownload.content);
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      } catch (e) {
+        toast("Couldn't copy", e.message);
+      }
     };
 
     document.getElementById("tDownload").onclick = () => {

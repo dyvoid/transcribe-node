@@ -139,7 +139,7 @@ catalog.py         Model catalog + recommendation
 config.py          Config from .env / pyproject.toml / env
 .env.example        Copy to .env to configure host, port, model, cache dir
 formatting.py      text / srt / vtt / verbose_json output
-static/            Browser UI
+static/            Browser UI (static/ds/ is the vendored dyvoided design system)
 tests/             Unit + API tests
 docs/              Architecture, ADRs, and guides
 start.bat/.sh      Launchers

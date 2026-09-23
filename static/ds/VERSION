@@ -1,0 +1,6 @@
+Vendored snapshot of the dyvoided.2 design system.
+Source: https://github.com/dyvoid/dyvoided-design-system
+Commit: 5df4c77 (fix(select): give the combobox a keyboard contract, and close four CSS gaps)
+
+Do not edit these files in place. To update, copy styles.css, components.css and tokens/*.css
+from a newer commit and change the commit line above. App-specific styles live in static/index.html.
