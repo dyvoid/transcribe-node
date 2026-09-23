@@ -6,6 +6,7 @@ WhisperX adapter (for diarization) is anticipated and slots in without structura
 change.
 """
 
+import contextlib
 import os
 import sys
 import sysconfig
@@ -217,48 +218,61 @@ class EngineManager:
         self._model: str | None = None
         self._device: str | None = None
         self._compute_type: str | None = None
+        # (model, device, compute_type) being switched in. Kept apart from the fields above, which
+        # only change under the infer lock, so a running job always sees the model it runs on.
+        self._pending: tuple[str, str, str] | None = None
         self._state_lock = threading.Lock()
         self._infer_lock = threading.Lock()
         self._log: deque[LogEntry] = deque(maxlen=200)
 
     def status(self) -> dict[str, object]:
+        pending = self._pending
+        fields: tuple[str | None, str | None, str | None] = (
+            pending
+            if self._state == "loading" and pending is not None
+            else (self._model, self._device, self._compute_type)
+        )
+        model, device, compute_type = fields
         return {
             "state": self._state,
-            "model": self._model,
-            "device": self._device,
-            "compute_type": self._compute_type,
+            "model": model,
+            "device": device,
+            "compute_type": compute_type,
         }
 
     def load(self, model: str, device: str, compute_type: str) -> dict[str, object]:
         # Lock order is always state -> infer. Holding the infer lock waits out any running
         # transcription, and releasing the current model first means two models never share memory.
         with self._state_lock:
-            # Report the incoming model while waiting on a running transcription, not the old one.
-            self._state, self._model, self._device, self._compute_type = (
-                "loading",
-                model,
-                device,
-                compute_type,
-            )
+            self._pending = (model, device, compute_type)  # set before state; readers check state
+            self._state = "loading"
             with self._infer_lock:
-                self._engine.unload()
                 try:
-                    self._engine.load(model, device, compute_type, self._download_root)
-                except Exception:
                     self._engine.unload()
+                    self._engine.load(model, device, compute_type, self._download_root)
+                except BaseException:
+                    # Whatever failed, end in a clean idle state; a stuck "loading" would lock the
+                    # operator out (the UI disables Start/Stop while loading).
+                    with contextlib.suppress(Exception):
+                        self._engine.unload()
                     self._clear()
                     raise
+                self._model, self._device, self._compute_type = model, device, compute_type
+                self._pending = None
                 self._state = "loaded"
         return self.status()
 
     def unload(self) -> dict[str, object]:
         with self._state_lock, self._infer_lock:
-            self._engine.unload()
-            self._clear()
+            try:
+                self._engine.unload()
+            finally:
+                self._clear()
         return self.status()
 
     def _clear(self) -> None:
         self._state = "idle"
+        self._pending = None
         self._model = None
         self._device = None
         self._compute_type = None
@@ -286,8 +300,9 @@ class EngineManager:
 
     def ensure_loaded(self) -> None:
         if self._state == "loading":
+            incoming = self._pending[0] if self._pending else "unknown"
             raise EngineNotLoadedError(
-                f"Model '{self._model}' is loading. Retry once the engine reports loaded."
+                f"Model '{incoming}' is loading. Retry once the engine reports loaded."
             )
         if not self.is_loaded:
             raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")

@@ -212,8 +212,8 @@ def test_translations_accept_bracket_granularities(client):
 
 
 def test_not_loaded_while_switching_models_says_so(client):
+    main.manager._pending = ("medium", "cpu", "int8")
     main.manager._state = "loading"
-    main.manager._model = "medium"
     res = client.post("/v1/audio/transcriptions", files=_upload())
     assert res.status_code == 409
     assert "'medium' is loading" in res.json()["detail"]
