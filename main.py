@@ -18,6 +18,7 @@ from engine import (
     EngineManager,
     EngineNotLoadedError,
     FasterWhisperEngine,
+    InvalidInputError,
     TranscribeOptions,
 )
 from formatting import to_srt, to_verbose_json, to_vtt
@@ -121,8 +122,11 @@ async def _handle_transcription(
         raise HTTPException(
             status_code=400, detail=f"Unsupported response_format: {response_format}"
         )
-    if not manager.is_loaded:
-        raise HTTPException(status_code=409, detail="No model loaded. Load a model first.")
+    # Cheap pre-check before accepting a possibly multi-GB upload; re-checked under the lock later.
+    try:
+        manager.ensure_loaded()
+    except EngineNotLoadedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # `model` is accepted for OpenAI client compatibility (they send e.g. "whisper-1") but not used:
     # the model is chosen by the operator via /engine/load, never switched per request.
@@ -148,7 +152,7 @@ async def _handle_transcription(
         )
     except EngineNotLoadedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:  # undecodable audio, unknown language code, ...
+    except InvalidInputError as exc:  # undecodable audio, unknown language code, ...
         raise HTTPException(status_code=400, detail=f"Invalid input: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {exc}") from exc

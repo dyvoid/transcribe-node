@@ -157,6 +157,11 @@ def test_load_waits_for_running_transcription():
     loader.start()
     loader.join(timeout=0.2)
     assert loader.is_alive(), "load must not start while a transcription holds the model"
+    # While waiting, status names the incoming model and new work is turned away clearly.
+    assert manager.status()["state"] == "loading"
+    assert manager.status()["model"] == "medium"
+    with pytest.raises(EngineNotLoadedError, match="'medium' is loading"):
+        manager.transcribe("b.wav", "b.wav", TranscribeOptions())
     release.set()
     worker.join(timeout=5)
     loader.join(timeout=5)
@@ -164,17 +169,51 @@ def test_load_waits_for_running_transcription():
     assert manager.status()["model"] == "medium"
 
 
+def test_unload_waits_for_running_transcription():
+    manager, engine = make_manager()
+    manager.load("small", "cpu", "int8")
+    started, release = threading.Event(), threading.Event()
+    original = engine.transcribe
+
+    def slow_transcribe(path, options):
+        started.set()
+        release.wait(timeout=5)
+        return original(path, options)
+
+    engine.transcribe = slow_transcribe
+    worker = threading.Thread(
+        target=manager.transcribe, args=("a.wav", "a.wav", TranscribeOptions())
+    )
+    worker.start()
+    started.wait(timeout=5)
+    unloader = threading.Thread(target=manager.unload)
+    unloader.start()
+    unloader.join(timeout=0.2)
+    assert unloader.is_alive() and engine.loaded
+    release.set()
+    worker.join(timeout=5)
+    unloader.join(timeout=5)
+    assert manager.log_entries()[0]["status"] == "ok"
+    assert engine.loaded is False
+
+
 class _FakeWhisperModel:
-    def __init__(self, error: Exception | None = None) -> None:
+    def __init__(self, error: Exception | None = None, iter_error: Exception | None = None) -> None:
         self.kwargs: dict[str, object] = {}
         self.error = error
+        self.iter_error = iter_error
 
     def transcribe(self, audio_path, **kwargs):
         self.kwargs = kwargs
         if self.error is not None:
             raise self.error
         info = type("Info", (), {"language": "en", "duration": 1.0})()
-        return iter([]), info
+        return self._segments(), info
+
+    def _segments(self):
+        if self.iter_error is not None:
+            raise self.iter_error
+        yield from ()
 
 
 def _engine_with(model: _FakeWhisperModel) -> FasterWhisperEngine:
@@ -199,3 +238,28 @@ def test_backend_value_errors_become_invalid_input():
     model = _FakeWhisperModel(ValueError("'xx' is not a valid language code"))
     with pytest.raises(InvalidInputError):
         _engine_with(model).transcribe("a.wav", TranscribeOptions(language="xx"))
+
+
+def test_decode_failure_during_lazy_iteration_is_invalid_input():
+    from av.error import InvalidDataError
+
+    model = _FakeWhisperModel(iter_error=InvalidDataError(1094995529, "Invalid data"))
+    with pytest.raises(InvalidInputError):
+        _engine_with(model).transcribe("a.wav", TranscribeOptions())
+
+
+def test_unsupported_container_is_invalid_input():
+    from av.error import DemuxerNotFoundError
+
+    model = _FakeWhisperModel(DemuxerNotFoundError(-1128613112, "Demuxer not found"))
+    with pytest.raises(InvalidInputError):
+        _engine_with(model).transcribe("a.xyz", TranscribeOptions())
+
+
+def test_server_side_ffmpeg_errors_are_not_invalid_input():
+    import av.error
+
+    model = _FakeWhisperModel(av.error.FileNotFoundError(2, "No such file", "a.wav"))
+    with pytest.raises(Exception) as info:
+        _engine_with(model).transcribe("a.wav", TranscribeOptions())
+    assert not isinstance(info.value, InvalidInputError)

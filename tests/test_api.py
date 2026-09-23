@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from stubs import StubEngine
 
 import main
-from engine import EngineManager
+from engine import EngineManager, InvalidInputError
 
 
 @pytest.fixture
@@ -138,7 +140,7 @@ def test_word_granularity_openai_sdk_bracket_field(client):
 
 def test_invalid_input_maps_to_400(client):
     engine = _loaded_client_engine(client)
-    engine.transcribe_error = ValueError("'xx' is not a valid language code")
+    engine.transcribe_error = InvalidInputError("'xx' is not a valid language code")
     res = client.post("/v1/audio/transcriptions", files=_upload(), data={"language": "xx"})
     assert res.status_code == 400
     assert "not a valid language code" in res.json()["detail"]
@@ -176,3 +178,42 @@ def test_static_dir_is_project_relative():
     from config import ROOT
 
     assert main.STATIC_DIR == ROOT / "static"
+
+
+def test_server_side_value_error_is_not_blamed_on_client(client):
+    engine = _loaded_client_engine(client)
+    engine.transcribe_error = ValueError("bug in our code")
+    assert client.post("/v1/audio/transcriptions", files=_upload()).status_code == 500
+
+
+def test_temp_file_removed_on_success_and_error(client):
+    engine = _loaded_client_engine(client)
+    paths: list[str] = []
+    original = engine.transcribe
+
+    def capture(path, options):
+        paths.append(path)
+        return original(path, options)
+
+    engine.transcribe = capture
+    client.post("/v1/audio/transcriptions", files=_upload())
+    engine.raise_on_transcribe = True
+    client.post("/v1/audio/transcriptions", files=_upload())
+    assert len(paths) == 2
+    assert not any(Path(p).exists() for p in paths)
+
+
+def test_translations_accept_bracket_granularities(client):
+    engine = _loaded_client_engine(client)
+    client.post(
+        "/v1/audio/translations", files=_upload(), data={"timestamp_granularities[]": "word"}
+    )
+    assert engine.calls[0][1].word_timestamps is True
+
+
+def test_not_loaded_while_switching_models_says_so(client):
+    main.manager._state = "loading"
+    main.manager._model = "medium"
+    res = client.post("/v1/audio/transcriptions", files=_upload())
+    assert res.status_code == 409
+    assert "'medium' is loading" in res.json()["detail"]

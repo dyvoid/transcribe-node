@@ -54,7 +54,7 @@ TEMPERATURE_FALLBACK = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 
 
 class EngineNotLoadedError(RuntimeError):
-    """Raised when work is requested but no model is loaded."""
+    """Raised when work is requested but no model is loaded (or one is being switched in)."""
 
 
 class InvalidInputError(ValueError):
@@ -156,7 +156,7 @@ class FasterWhisperEngine(TranscriptionEngine):
     def transcribe(self, audio_path: str, options: TranscribeOptions) -> TranscriptionResult:
         if self._model is None:
             raise EngineNotLoadedError("Engine has no model loaded.")
-        from av.error import FFmpegError
+        from av.error import DecoderNotFoundError, DemuxerNotFoundError
 
         temperature = TEMPERATURE_FALLBACK if options.temperature == 0 else options.temperature
         try:
@@ -172,7 +172,10 @@ class FasterWhisperEngine(TranscriptionEngine):
             )
             # Segments are produced lazily, so decoding can still fail while iterating.
             return self._collect(segments_gen, info, options)
-        except (ValueError, FFmpegError) as exc:
+        # Client-side faults only: undecodable data (av's InvalidDataError is a ValueError), an
+        # unsupported container/codec, or a rejected parameter such as an unknown language code.
+        # Other FFmpeg errors (out of memory, missing temp file) stay server errors.
+        except (ValueError, DecoderNotFoundError, DemuxerNotFoundError) as exc:
             raise InvalidInputError(str(exc)) from exc
 
     @staticmethod
@@ -230,20 +233,21 @@ class EngineManager:
         # Lock order is always state -> infer. Holding the infer lock waits out any running
         # transcription, and releasing the current model first means two models never share memory.
         with self._state_lock:
-            self._state = "loading"
+            # Report the incoming model while waiting on a running transcription, not the old one.
+            self._state, self._model, self._device, self._compute_type = (
+                "loading",
+                model,
+                device,
+                compute_type,
+            )
             with self._infer_lock:
                 self._engine.unload()
-                self._clear()
-                self._state = "loading"
                 try:
                     self._engine.load(model, device, compute_type, self._download_root)
                 except Exception:
                     self._engine.unload()
                     self._clear()
                     raise
-                self._model = model
-                self._device = device
-                self._compute_type = compute_type
                 self._state = "loaded"
         return self.status()
 
@@ -266,32 +270,37 @@ class EngineManager:
     def transcribe(
         self, audio_path: str, filename: str, options: TranscribeOptions
     ) -> TranscriptionResult:
-        if not self.is_loaded:
-            raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")
-
+        self.ensure_loaded()
         started = time.perf_counter()
         with self._infer_lock:
             # Re-check under the lock: an unload or model switch may have run while this waited.
-            if not self.is_loaded:
-                raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")
+            self.ensure_loaded()
+            model = self._model or "-"  # captured now; a pending switch rewrites self._model
             try:
                 result = self._engine.transcribe(audio_path, options)
             except Exception:
-                self._record(filename, time.perf_counter() - started, "error")
+                self._record(filename, model, time.perf_counter() - started, "error")
                 raise
-            # Recorded under the lock so the entry names the model that actually ran.
-            self._record(filename, time.perf_counter() - started, "ok")
+        self._record(filename, model, time.perf_counter() - started, "ok")
         return result
+
+    def ensure_loaded(self) -> None:
+        if self._state == "loading":
+            raise EngineNotLoadedError(
+                f"Model '{self._model}' is loading. Retry once the engine reports loaded."
+            )
+        if not self.is_loaded:
+            raise EngineNotLoadedError("No model loaded. Load a model before transcribing.")
 
     def log_entries(self) -> list[dict[str, object]]:
         return [entry.__dict__ for entry in self._log]
 
-    def _record(self, filename: str, seconds: float, status: str) -> None:
+    def _record(self, filename: str, model: str, seconds: float, status: str) -> None:
         self._log.appendleft(
             LogEntry(
                 timestamp=datetime.now(UTC).isoformat(timespec="seconds"),
                 filename=filename,
-                model=self._model or "-",
+                model=model,
                 processing_seconds=round(seconds, 2),
                 status=status,
             )
