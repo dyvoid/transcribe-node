@@ -108,3 +108,71 @@ def test_anti_repetition_can_be_overridden(client):
     opts = main.manager._engine.calls[0][1]
     assert opts.vad_filter is False
     assert opts.condition_on_previous_text is True
+
+
+def _loaded_client_engine(client) -> StubEngine:
+    client.post("/engine/load", json={"model": "small"})
+    engine = main.manager._engine
+    assert isinstance(engine, StubEngine)
+    return engine
+
+
+def test_word_granularity_plain_field(client):
+    engine = _loaded_client_engine(client)
+    client.post(
+        "/v1/audio/transcriptions", files=_upload(), data={"timestamp_granularities": "word"}
+    )
+    assert engine.calls[0][1].word_timestamps is True
+
+
+def test_word_granularity_openai_sdk_bracket_field(client):
+    # The OpenAI Python SDK serializes arrays in multipart as `name[]`.
+    engine = _loaded_client_engine(client)
+    client.post(
+        "/v1/audio/transcriptions",
+        files=_upload(),
+        data={"timestamp_granularities[]": ["word", "segment"]},
+    )
+    assert engine.calls[0][1].word_timestamps is True
+
+
+def test_invalid_input_maps_to_400(client):
+    engine = _loaded_client_engine(client)
+    engine.transcribe_error = ValueError("'xx' is not a valid language code")
+    res = client.post("/v1/audio/transcriptions", files=_upload(), data={"language": "xx"})
+    assert res.status_code == 400
+    assert "not a valid language code" in res.json()["detail"]
+
+
+def test_engine_failure_maps_to_json_500(client):
+    engine = _loaded_client_engine(client)
+    engine.raise_on_transcribe = True
+    res = client.post("/v1/audio/transcriptions", files=_upload())
+    assert res.status_code == 500
+    assert res.json()["detail"] == "Transcription failed: boom"
+
+
+def test_upload_reaches_engine_intact(client):
+    engine = _loaded_client_engine(client)
+    seen: list[bytes] = []
+    original = engine.transcribe
+
+    def capture(path, options):
+        with open(path, "rb") as f:
+            seen.append(f.read())
+        return original(path, options)
+
+    engine.transcribe = capture
+    client.post("/v1/audio/transcriptions", files=_upload())
+    assert seen == [b"fake-bytes"]
+
+
+def test_unload_endpoint(client):
+    _loaded_client_engine(client)
+    assert client.post("/engine/unload").json()["state"] == "idle"
+
+
+def test_static_dir_is_project_relative():
+    from config import ROOT
+
+    assert main.STATIC_DIR == ROOT / "static"

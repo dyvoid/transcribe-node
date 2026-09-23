@@ -284,6 +284,7 @@
     let state = "idle";
     let selectedFile = null;
     let lastDownload = null;
+    let transcribing = false;
 
     const STATE_BADGE = {
       idle: ["neutral", "Idle"],
@@ -291,9 +292,13 @@
       loaded: ["success", "Loaded"],
     };
 
+    async function errorMessage(res) {
+      try { return (await res.json()).detail || res.statusText; } catch { return res.statusText; }
+    }
+
     async function getJSON(url, opts) {
       const res = await fetch(url, opts);
-      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      if (!res.ok) throw new Error(await errorMessage(res));
       return res.json();
     }
 
@@ -399,7 +404,7 @@
       transcribe.classList.toggle("collapsed", !loaded);
       settings.querySelector(".ds-panel-body").inert = loaded;
       transcribe.querySelector(".ds-panel-body").inert = !loaded;
-      document.getElementById("tRun").disabled = !loaded || !selectedFile;
+      document.getElementById("tRun").disabled = !loaded || !selectedFile || transcribing;
     }
 
     // The log is in-memory for this server run, so local wall-clock time is enough; the full ISO stamp is in the tooltip.
@@ -487,7 +492,7 @@
     }
 
     document.getElementById("tRun").onclick = async () => {
-      if (!selectedFile) return;
+      if (!selectedFile || transcribing) return;
       const task = document.getElementById("tTask").value;
       const format = document.getElementById("tFormat").value;
       const lang = document.getElementById("tLanguage").value.trim();
@@ -508,17 +513,14 @@
       const url = task === "translate" ? "/v1/audio/translations" : "/v1/audio/transcriptions";
       const runBtn = document.getElementById("tRun");
       const resultBox = document.getElementById("tResult");
+      transcribing = true;
       runBtn.disabled = true;
       resultBox.hidden = true;
       setStatus(task === "translate" ? "Translating…" : "Transcribing…", { busy: true });
 
       try {
         const res = await fetch(url, { method: "POST", body: form });
-        if (!res.ok) {
-          let msg = res.statusText;
-          try { msg = (await res.json()).detail || msg; } catch {}
-          throw new Error(msg);
-        }
+        if (!res.ok) throw new Error(await errorMessage(res));
         let text, ext;
         if (format === "json" || format === "verbose_json") {
           const data = await res.json();
@@ -536,6 +538,7 @@
       } catch (e) {
         setStatus(e.message, { error: true });
       } finally {
+        transcribing = false;
         applyPanelStates();
       }
     };

@@ -19,12 +19,12 @@ Primary transcription endpoint.
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `file` | file | required | Any audio or video file (mp4, mkv, mp3, wav, m4a, etc.) |
-| `model` | string | config default | Model to use, e.g. `whisper-1` or a local model name |
+| `model` | string | — | Accepted for OpenAI client compatibility (e.g. `whisper-1`) and ignored: requests always use the model loaded via `/engine/load` |
 | `language` | string | auto | ISO-639-1 language code e.g. `nl`, `en` |
 | `prompt` | string | — | Optional context to guide transcription style |
 | `response_format` | string | `json` | `json`, `text`, `srt`, `vtt`, `verbose_json` |
-| `temperature` | float | `0` | Sampling temperature |
-| `timestamp_granularities` | array | `["segment"]` | `segment` and/or `word` — pass `["word"]` for per-word timestamps |
+| `temperature` | float | `0` | Sampling temperature. `0` follows OpenAI semantics: start greedy and step up (0.2 … 1.0) when a segment fails the log-prob/compression checks |
+| `timestamp_granularities` | array | `["segment"]` | `segment` and/or `word` — pass `["word"]` for per-word timestamps. The `timestamp_granularities[]` field name sent by the OpenAI SDKs is also accepted |
 | `vad_filter` | bool | `true` | Non-standard. Silero VAD strips silence/noise before transcription. Reduces repetition loops. |
 | `condition_on_previous_text` | bool | `false` | Non-standard. When `false`, each segment is decoded without feeding prior output back as context, breaking repetition feedback loops. |
 
@@ -47,9 +47,21 @@ Primary transcription endpoint.
         { "word": "welcome", "start": 0.6, "end": 1.1 }
       ]
     }
+  ],
+  "words": [
+    { "word": "Hello", "start": 0.0, "end": 0.4 },
+    { "word": "and", "start": 0.4, "end": 0.6 },
+    { "word": "welcome", "start": 0.6, "end": 1.1 }
   ]
 }
 ```
+
+With word timestamps requested, words appear both per segment and as a flat top-level `words`
+list (the shape OpenAI returns). Without them, neither `words` key is present.
+
+**Errors:** `400` for an unsupported `response_format`, an undecodable file or an invalid parameter
+(e.g. unknown language code); `409` when no model is loaded; `500` for other engine failures. The
+body is always JSON `{"detail": "..."}`.
 
 ### `POST /v1/audio/translations`
 Same as transcriptions but always outputs English, regardless of source language.
@@ -85,7 +97,8 @@ Returns available models in OpenAI list format. Non-standard but useful for tool
 | `medium` | ~3GB | Good | Constrained VRAM |
 | `small` | ~2GB | OK | Fast previews |
 
-Default model is set in `pyproject.toml` and can be overridden per-request.
+Default model (loaded when `/engine/load` is called without one) is set in `pyproject.toml` or
+`TRANSCRIBENODE_MODEL`. The model is an operator choice, not a per-request one.
 
 The server recommends a model by comparing detected memory against the requirements above: it picks
 the highest-quality model that fits comfortably, leaving headroom. This recommendation is computed

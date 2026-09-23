@@ -1,6 +1,7 @@
 """FastAPI server: OpenAI-compatible transcription API, engine control, hardware
 info, and the operator UI. Run directly to start the service."""
 
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -12,13 +13,18 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from catalog import MODEL_CATALOG, recommend_model
-from config import load_config
-from engine import EngineManager, FasterWhisperEngine, TranscribeOptions
+from config import ROOT, load_config
+from engine import (
+    EngineManager,
+    EngineNotLoadedError,
+    FasterWhisperEngine,
+    TranscribeOptions,
+)
 from formatting import to_srt, to_verbose_json, to_vtt
 from hardware import detect_hardware
 
 CONFIG = load_config()
-STATIC_DIR = CONFIG.models_dir.parent / "static"
+STATIC_DIR = ROOT / "static"
 
 app = FastAPI(title="TranscribeNode", version="1.2.1")
 manager = EngineManager(FasterWhisperEngine(), str(CONFIG.models_dir))
@@ -94,7 +100,9 @@ async def engine_load(request: LoadRequest) -> dict[str, object]:
 
 @app.post("/engine/unload")
 async def engine_unload() -> dict[str, object]:
-    return manager.unload()
+    # unload() waits on the same locks as a model load or running transcription; keep it off the
+    # event loop so status polling and other requests stay responsive meanwhile.
+    return await run_in_threadpool(manager.unload)
 
 
 async def _handle_transcription(
@@ -116,6 +124,8 @@ async def _handle_transcription(
     if not manager.is_loaded:
         raise HTTPException(status_code=409, detail="No model loaded. Load a model first.")
 
+    # `model` is accepted for OpenAI client compatibility (they send e.g. "whisper-1") but not used:
+    # the model is chosen by the operator via /engine/load, never switched per request.
     granularities = timestamp_granularities or ["segment"]
     options = TranscribeOptions(
         task=task,
@@ -129,13 +139,19 @@ async def _handle_transcription(
 
     suffix = Path(file.filename or "audio").suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
         tmp_path = tmp.name
-
     try:
+        # Stream the spooled upload to disk off the event loop; uploads can be multi-GB video.
+        await run_in_threadpool(_copy_upload, file, tmp_path)
         result = await run_in_threadpool(
             manager.transcribe, tmp_path, file.filename or "audio", options
         )
+    except EngineNotLoadedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:  # undecodable audio, unknown language code, ...
+        raise HTTPException(status_code=400, detail=f"Invalid input: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {exc}") from exc
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
@@ -150,6 +166,18 @@ async def _handle_transcription(
     return JSONResponse({"text": result.text})
 
 
+def _copy_upload(file: UploadFile, dest: str) -> None:
+    with open(dest, "wb") as out:
+        shutil.copyfileobj(file.file, out)
+
+
+def _granularities(plain: list[str] | None, bracketed: list[str] | None) -> list[str] | None:
+    # OpenAI SDKs send arrays in multipart as `timestamp_granularities[]`; curl users send the bare
+    # name. Accept both.
+    merged = (plain or []) + (bracketed or [])
+    return merged or None
+
+
 @app.post("/v1/audio/transcriptions")
 async def transcriptions(
     file: UploadFile = File(...),
@@ -159,6 +187,9 @@ async def transcriptions(
     response_format: str = Form("json"),
     temperature: float = Form(0.0),
     timestamp_granularities: list[str] | None = Form(None),
+    timestamp_granularities_brackets: list[str] | None = Form(
+        None, alias="timestamp_granularities[]"
+    ),
     vad_filter: bool = Form(True),
     condition_on_previous_text: bool = Form(False),
 ):
@@ -170,7 +201,7 @@ async def transcriptions(
         prompt,
         response_format,
         temperature,
-        timestamp_granularities,
+        _granularities(timestamp_granularities, timestamp_granularities_brackets),
         vad_filter,
         condition_on_previous_text,
     )
@@ -184,6 +215,9 @@ async def translations(
     response_format: str = Form("json"),
     temperature: float = Form(0.0),
     timestamp_granularities: list[str] | None = Form(None),
+    timestamp_granularities_brackets: list[str] | None = Form(
+        None, alias="timestamp_granularities[]"
+    ),
     vad_filter: bool = Form(True),
     condition_on_previous_text: bool = Form(False),
 ):
@@ -196,7 +230,7 @@ async def translations(
         prompt,
         response_format,
         temperature,
-        timestamp_granularities,
+        _granularities(timestamp_granularities, timestamp_granularities_brackets),
         vad_filter,
         condition_on_previous_text,
     )

@@ -34,3 +34,21 @@ def test_verbose_json_includes_words_only_when_present():
     assert payload["language"] == "en"
     assert "words" in payload["segments"][0]
     assert "words" not in payload["segments"][1]
+
+
+def test_verbose_json_has_openai_top_level_words():
+    result = TranscriptionResult(
+        task="transcribe", language="en", duration=5.0, text="x", segments=_segments()
+    )
+    assert to_verbose_json(result)["words"] == [{"word": "Hello", "start": 0.0, "end": 0.4}]
+
+
+def test_verbose_json_omits_top_level_words_without_word_timestamps():
+    result = TranscriptionResult(
+        task="transcribe",
+        language="en",
+        duration=1.0,
+        text="x",
+        segments=[Segment(0, 0.0, 1.0, "x", None)],
+    )
+    assert "words" not in to_verbose_json(result)

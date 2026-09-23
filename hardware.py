@@ -62,5 +62,14 @@ def _detect_nvidia() -> tuple[str, float] | None:
     lines = out.strip().splitlines()
     if not lines:
         return None
-    name, free_mb = (part.strip() for part in lines[0].split(","))
-    return name, round(float(free_mb) / 1024, 1)
+    # rsplit: GPU names can contain commas; free memory is always the last field.
+    name, sep, free_mb = lines[0].rpartition(",")
+    if not sep:
+        return None
+    try:
+        free_gb = round(float(free_mb.strip()) / 1024, 1)
+    except ValueError:
+        # Some setups (MIG, vGPU, certain laptop drivers) report "[N/A]". The GPU is still usable;
+        # 0 GB makes the recommendation fall back to the smallest model.
+        free_gb = 0.0
+    return name.strip(), free_gb
