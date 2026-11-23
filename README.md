@@ -39,8 +39,8 @@ transcription, and any tool written against the OpenAI audio API works by swappi
 ## Quick Start
 
 ```bash
-git clone <repo-url>
-cd TranscribeNode
+git clone https://github.com/dyvoid/transcribe-node.git
+cd transcribe-node
 
 # Windows
 ./start.bat
@@ -167,8 +167,9 @@ The launchers (`start.bat` / `start.sh`) install the `cuda` extra for you; it's 
   (`condition_on_previous_text=false`) by default to prevent this. Both can be overridden per
   request if needed.
 - One model is loaded at a time; transcription requests are processed serially.
-- The UI is an operator console: model management, a download progress bar (download milestones are
-  logged to the console instead), request history persistence, and authentication are out of scope.
+- The UI is an operator console: model management (deleting cached models), a download progress
+  bar (download milestones are logged to the console instead), request history persistence, and
+  authentication are out of scope.
 
 ## License
 
